@@ -1,0 +1,25 @@
+rsync -av /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/calib/*_e2dsff_A_wave_night_A.fits /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/calib_NIRPS/
+
+rsync -av \
+  --include='*/' \
+  --include='**/*_e2dsff_A.fits' \
+  --exclude='*' \
+  /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects/ \
+  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/scidata_NIRPS/
+
+# Copy hotstars (flattened - no subdirectories)
+rsync -av --no-relative \
+  --include='*HD195094*' \
+  --include='*HR8709*' \
+  --include='*HR1903*' \
+  --include='*HR3117*' \
+  --include='*HR4023*' \
+  --include='*HR9098*' \
+  --include='*HR3314*' \
+  --include='*HR4467*' \
+  --include='*HR7590*' \
+  --include='*ZETVIR*' \
+  --include='*/' \
+  --exclude='*' \
+  /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects/ \
+  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/hotstars_NIRPS/

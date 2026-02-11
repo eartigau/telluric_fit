@@ -1,0 +1,34 @@
+# Batch Configuration for Telluric Correction Pipeline
+# This file defines the batch run settings and list of objects to process
+# For telluric correction parameters, see telluric_config.yaml
+
+# =============================================================================
+# Machine-specific configuration
+# The code will check each machine's 'detect_path' to determine which machine
+# is being used. The first matching machine configuration will be applied.
+# =============================================================================
+machines:
+  FIR:
+    detect_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas_test_fit'
+    project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas_test_fit'
+    doplot: false                # Don't show interactive plots on FIR
+    n_cores: 8                   # Number of cores for parallel processing
+  
+  MacBook-eartigau:
+    detect_path: '/Volumes/irrisor/test_fit'
+    project_path: '/Volumes/irrisor/test_fit'
+    doplot: true                 # Show interactive plots on MacBook
+    n_cores: 1                   # Serial processing on MacBook (use 1 for no parallelization)
+
+# =============================================================================
+# Batch settings (common to all machines)
+# =============================================================================
+batch:
+  name: 'skypca_v5'                # Batch identifier
+  telluric_config: 'telluric_config.yaml'  # Path to telluric parameters
+  generate_plots: true             # Generate diagnostic PDF plots
+  plot_orders: [30, 60]            # Order range for plots [min, max], null for all
+
+# List of objects to process
+objects:
+  - name: 'TOI4552'

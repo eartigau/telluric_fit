@@ -1,0 +1,93 @@
+# Telluric Correction Parameters Configuration
+# This file defines parameters for telluric absorption correction
+
+# Instrument settings
+instrument: 'NIRPS'              # NIRPS or SPIROU
+template_style: 'model'          # model or self
+
+# Hot stars used for telluric fitting
+# These objects have featureless spectra ideal for measuring atmospheric absorption
+hot_stars:
+  - HD195094
+  - HR1903
+  - HR3117
+  - HR3131
+  - HR3314
+  - HR4023
+  - HR4467
+  - HR6743
+  - HR7590
+  - HR8709
+  - HR9098
+  - ZETVIR
+
+# Demo order for diagnostic plots (shown with plt.show() if doplot=True)
+demo_order:
+  NIRPS: 
+    - 0
+    - 71
+  SPIROU: 
+    - 35
+    - 38
+
+# Processing parameters
+processing:
+  randomize_files: true           # Shuffle file order for parallel script execution
+  lowpass_filter_size: 101
+  hotstar_medfilt_width: 150      # Running median filter width for hot stars (km/s)
+  template_ratio_threshold_high: 3.0
+  template_ratio_threshold_low: 0.3
+  template_smooth_window: 501
+  min_valid_ratio: 0.1
+  low_flux_threshold: 0.2
+  sky_rejection_threshold: 1.0
+  dv_amp: 200  # km/s, velocity search range
+
+# Weight transition parameters
+# Controls the sigmoid transition for smooth weighting during optimization
+weighting:
+  # Sigma for sigmoid transition (smaller = sharper transition)
+  # During optimization, weights vary smoothly to avoid convergence issues
+  # In final spectrum, pixels with weight < 0.5 are set to NaN
+  transition_sigma: 0.02
+
+# Per-molecule parameters
+# Each molecule has:
+#   - depth_max: maximum absorption depth threshold
+#   - depth_saturated: depth at which absorption is considered saturated
+#   - reject_saturated: rejection threshold for saturated lines
+molecules:
+  H2O:
+    depth_max: 0.6
+    depth_saturated: 0.4
+    reject_saturated: 0.8
+  CH4:
+    depth_max: 0.5
+    depth_saturated: 0.2
+    reject_saturated: 0.8
+  CO2:
+    depth_max: 0.5
+    depth_saturated: 0.2
+    reject_saturated: 0.8
+  O2:
+    depth_max: 0.8
+    depth_saturated: 0.2
+    reject_saturated: 0.9
+
+# Quality control thresholds for compil_stats
+quality_control:
+  # O2_AIRM validity range - spectra outside this range are excluded from fitting
+  # Low values indicate fluorescence contamination (twilight O2 Meinel bands)
+  o2_airm_min: 0.92
+  o2_airm_max: 1.08
+  # RMS excess factor for residual correction - pixels with RMS > factor * smoothed_envelope
+  # are masked in predict_abso.py (unreliable correction, set to NaN)
+  # The envelope is computed per-order using medfilt + savgol smoothing
+  # Minimum allowed value is 1.5 (will raise error if set lower)
+  rms_excess_factor: 2.0
+
+# Paper figures output folder
+# Set paper_figures: true to generate one representative figure per processing step
+paper_figures:
+  enabled: false                   # Set to true to generate paper figures
+  output_dir: 'paper_figures'      # Folder for paper-quality figures (relative to project_path)
