@@ -1,65 +1,31 @@
-rsync -av /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/calib/*_e2dsff_A_wave_night_A.fits /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/calib_NIRPS/
+rsync -av /home/eartigau/projects/rrg-rdoyon/spirou/etienne_temporary/calib/*_e2dsff_A_wave_night_A.fits /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/calib_SPIROU/
 
 rsync -av \
   --include='*/' \
   --include='**/*_e2dsff_A.fits' \
   --exclude='*' \
-  /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects/ \
-  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/scidata_NIRPS/
+  /home/eartigau/projects/rrg-rdoyon/spirou/etienne_temporary/objects/ \
+  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/scidata_SPIROU/
 
 # Copy hotstars (flattened - no subdirectories)
 # Hot star list from telluric_config.yaml
-rsync -av --no-relative \
-  --include='*15PEG*' \
-  --include='*17PEG*' \
-  --include='*23LMI*' \
-  --include='*24LYN*' \
-  --include='*31CAS*' \
-  --include='*33LYN*' \
-  --include='*51DRA*' \
-  --include='*59PEG*' \
-  --include='*74PSCB*' \
-  --include='*82UMA*' \
-  --include='*BETSER*' \
-  --include='*CHICAP*' \
-  --include='*ETAPYX*' \
-  --include='*GAMSCT*' \
-  --include='*GAMTRI*' \
-  --include='*HD130917*' \
-  --include='*HD159170*' \
-  --include='*HD195094*' \
-  --include='*HR1314*' \
-  --include='*HR1832*' \
-  --include='*HR1903*' \
-  --include='*HR2180*' \
-  --include='*HR2209*' \
-  --include='*HR3117*' \
-  --include='*HR3131*' \
-  --include='*HR3314*' \
-  --include='*HR4023*' \
-  --include='*HR4467*' \
-  --include='*HR4468*' \
-  --include='*HR4687*' \
-  --include='*HR4722*' \
-  --include='*HR4889*' \
-  --include='*HR5107*' \
-  --include='*HR5671*' \
-  --include='*HR6025*' \
-  --include='*HR6743*' \
-  --include='*HR7590*' \
-  --include='*HR7830*' \
-  --include='*HR806*' \
-  --include='*HR8489*' \
-  --include='*HR8709*' \
-  --include='*HR9098*' \
-  --include='*IOTCYG*' \
-  --include='*LLEO*' \
-  --include='*OMICAPA*' \
-  --include='*PHILEO*' \
-  --include='*PI02ORI*' \
-  --include='*ZETLEP*' \
-  --include='*ZETVIR*' \
-  --include='*/' \
-  --exclude='*' \
-  /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects/ \
-  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/hotstars_SPIROU/
+HOT_STARS=(15PEG 17PEG 23LMI 24LYN 31CAS 33LYN 51DRA 59PEG 74PSCB 82UMA \
+           BETSER CHICAP ETAPYX GAMSCT GAMTRI HD130917 HD159170 HD195094 \
+           HR1314 HR1832 HR1903 HR2180 HR2209 HR3117 HR3131 HR3314 HR4023 \
+           HR4467 HR4468 HR4687 HR4722 HR4889 HR5107 HR5671 HR6025 HR6743 \
+           HR7590 HR7830 HR806 HR8489 HR8709 HR9098 IOTCYG LLEO OMICAPA \
+           PHILEO PI02ORI ZETLEP ZETVIR)
+
+SRC="/home/eartigau/projects/rrg-rdoyon/spirou/etienne_temporary/objects"
+DST="/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/hotstars_SPIROU"
+
+mkdir -p "$DST"
+
+for star in "${HOT_STARS[@]}"; do
+    if [ -d "$SRC/$star" ]; then
+        echo "Copying $star..."
+        rsync -av "$SRC/$star/"*_e2dsff_A.fits "$DST/" 2>/dev/null || true
+    fi
+done
+
+echo "Done syncing hot stars to $DST"
