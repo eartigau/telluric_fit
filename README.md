@@ -18,11 +18,12 @@ The pipeline has five main stages:
 
 ### Command
 ```bash
-bash sync
+bash sync_NIRPS   # For NIRPS data
+bash sync_SPIROU  # For SPIRou data
 ```
 
 ### What It Does
-The `sync` script uses `rsync` to copy required data files from remote servers to the local project directory:
+The `sync_{INSTRUMENT}` script uses `rsync` to copy required data files from remote servers to the local project directory:
 
 - **Calibration data**: Reference files (waveref, blaze, etc.) from `calib/` remote directory
   - Destination: `calib_NIRPS/` or `calib_SPIROU/`
@@ -505,3 +506,201 @@ tt.precompute_absorption_grid(instrument='NIRPS', force_recompute=True)
 |-----------|----------------------|-------------------|
 | Per-file optimization | ~10s | ~0.5s |
 | 100 files | ~17 min | ~1 min |
+
+---
+
+## Python API Usage
+
+In addition to command-line usage, you can call `predict_abso.py` programmatically:
+
+### Basic Usage
+
+```python
+from predict_abso import main
+
+main(
+    batch_name='skypca_v5',
+    instrument='NIRPS',
+    obj='TOI4552',
+    template_style='model'
+)
+```
+
+### Processing Multiple Objects
+
+```python
+from predict_abso import main
+
+objects = ['TOI4552', 'TOI1234', 'HD189733']
+
+for obj in objects:
+    print(f"\n{'='*60}\nProcessing {obj}\n{'='*60}")
+    
+    try:
+        main(
+            batch_name='batch_multi',
+            instrument='NIRPS',
+            obj=obj,
+            template_style='model'
+        )
+    except Exception as e:
+        print(f"Error for {obj}: {e}")
+        continue
+```
+
+### Configurable Parameters
+
+Parameters can be modified in `predict_abso_config.py`:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `lowpass_filter_size` | 101 | Size of lowpass filter window |
+| `template_ratio_threshold_high` | 3.0 | High threshold for outlier rejection |
+| `template_ratio_threshold_low` | 0.3 | Low threshold for outlier rejection |
+| `template_smooth_window` | 501 | Template ratio smoothing window |
+| `min_valid_ratio` | 0.1 | Minimum fraction of valid pixels |
+| `low_flux_threshold` | 0.2 | Low flux rejection threshold |
+| `sky_rejection_threshold` | 1.0 | Sky rejection threshold |
+| `dv_amp` | 200 | Velocity search amplitude (km/s) |
+
+---
+
+## Verifying Results
+
+### Check Output Files
+
+```python
+import glob
+import os
+from astropy.io import fits
+
+output_dir = 'tellupatched_NIRPS/TOI4552_skypca_v5_model/'
+files = sorted(glob.glob(os.path.join(output_dir, '*tellupatched_t.fits')))
+
+print(f"Files processed: {len(files)}")
+
+if files:
+    with fits.open(files[0]) as hdul:
+        print("\nFITS extensions:")
+        hdul.info()
+        
+        print("\nAdded keywords:")
+        hdr = hdul['FluxA'].header
+        for key in ['ABS_VELO', 'SYS_VELO', 'EXPO_H2O', 'EXPO_CO2',
+                    'EXPO_CH4', 'EXPO_O2', 'H2O_CV', 'CO2_VMR']:
+            if key in hdr:
+                print(f"  {key}: {hdr[key]}")
+```
+
+### Quick Visualization
+
+```python
+from astropy.io import fits
+import matplotlib.pyplot as plt
+import numpy as np
+
+file = 'tellupatched_NIRPS/TOI4552_test/file_tellupatched_t.fits'
+
+with fits.open(file) as hdul:
+    sp_corr = hdul['FluxA'].data
+    recon = hdul['Recon'].data
+    wave = fits.getdata('calib_NIRPS/waveref.fits')
+
+# Plot a single order
+iord = 40
+
+fig, ax = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+ax[0].plot(wave[iord], sp_corr[iord], 'k-', alpha=0.7, label='Corrected')
+ax[0].set_ylabel('Flux')
+ax[0].legend()
+
+ax[1].plot(wave[iord], recon[iord], 'r-', alpha=0.7, label='Absorption')
+ax[1].set_ylabel('Transmission')
+ax[1].set_xlabel('Wavelength (nm)')
+ax[1].legend()
+
+plt.tight_layout()
+plt.savefig('check_correction.png', dpi=150)
+```
+
+---
+
+## Performance Benchmarks
+
+Typical processing times on MacBook Pro M1:
+
+| Number of files | Total time | Time/file |
+|-----------------|------------|-----------|
+| 10 | ~15 min | ~1.5 min |
+| 50 | ~75 min | ~1.5 min |
+| 100 | ~150 min | ~1.5 min |
+
+**Factors affecting performance:**
+- Number of spectral orders
+- Number of optimization iterations
+- Plot generation (`doplot=True` slows down processing)
+- Disk I/O speed
+
+---
+
+## Best Practices
+
+### Batch Naming Convention
+
+Use descriptive, versioned batch names:
+
+```
+batch_name = "{purpose}_{version}"
+
+Examples:
+- "skypca_v5"
+- "test_new_algo_v1"
+- "paper_final_v3"
+```
+
+### Traceability
+
+Always save the configuration used for processing:
+
+```python
+import json
+from datetime import datetime
+
+config = get_batch_config(...)
+config['processing_date'] = datetime.now().isoformat()
+config['user'] = os.environ.get('USER', 'unknown')
+
+with open(f"config_{config['batch_name']}.json", 'w') as f:
+    json.dump(config, f, indent=2)
+```
+
+### Validation Checklist
+
+Before processing large datasets:
+
+1. Test on 1-2 files first
+2. Visually inspect results
+3. Compare with previous version if available
+4. Validate optimized exponents are reasonable
+5. Document the configuration used
+
+### Data Backup
+
+Always keep original data and backup processed results:
+
+```bash
+# Backup processed data
+tar -czf tellupatched_backup_$(date +%Y%m%d).tar.gz tellupatched_NIRPS/
+```
+
+---
+
+## Git Repository
+
+Clone the repository:
+
+```bash
+git clone https://github.com/eartigau/telluric_fit.git
+cd telluric_fit
+git pull  # to get latest updates
+```
