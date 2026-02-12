@@ -1460,6 +1460,113 @@ def savgol_filter_nan_fast(y: np.ndarray,
     return y_filtered
 
 
+def _savgol_interp_nan(y: np.ndarray, window_length: int, polyorder: int) -> np.ndarray:
+    """
+    Fast Savgol filter that handles NaNs by linear interpolation.
+    
+    Uses scipy's C-optimized savgol_filter after interpolating over NaN gaps.
+    Much faster than savgol_filter_nan_fast for large arrays.
+    """
+    y = np.asarray(y, dtype=np.float64)
+    valid = np.isfinite(y)
+    
+    if not np.any(valid):
+        return np.full_like(y, np.nan)
+    
+    if np.all(valid):
+        # No NaNs, use fast scipy version directly
+        return savgol_filter(y, window_length, polyorder, mode='nearest')
+    
+    # Interpolate over NaN gaps
+    x = np.arange(len(y))
+    y_interp = np.interp(x, x[valid], y[valid])
+    
+    # Apply fast scipy savgol
+    y_smooth = savgol_filter(y_interp, window_length, polyorder, mode='nearest')
+    
+    return y_smooth
+
+
+def savgol_filter_robust(y: np.ndarray,
+                         window_length: int,
+                         polyorder: int = 3,
+                         n_sigma: float = 5.0,
+                         max_iter: int = 10) -> np.ndarray:
+    """
+    Robust Savitzky-Golay filter with iterative sigma-clipping.
+
+    Applies savgol filter iteratively, rejecting outliers that deviate by
+    more than n_sigma from the smoothed curve. RMS is estimated robustly
+    using the 16th-84th percentile interval. Uses fast scipy implementation
+    with linear interpolation over NaN gaps.
+
+    Parameters
+    ----------
+    y : np.ndarray
+        Data to filter (NaNs allowed)
+    window_length : int
+        Filter window length (must be odd, e.g. 101 for ~100 pixel scale)
+    polyorder : int
+        Polynomial order for Savgol filter (default: 3)
+    n_sigma : float
+        Number of sigma for outlier rejection (default: 5.0)
+    max_iter : int
+        Maximum number of sigma-clipping iterations (default: 10)
+
+    Returns
+    -------
+    y_filtered : np.ndarray
+        Robustly smoothed data (same shape as input)
+    
+    Notes
+    -----
+    The RMS is computed from the 16th-84th percentile range of residuals,
+    which is robust to outliers.
+    
+    Example
+    -------
+    >>> trend = savgol_filter_robust(spectrum, window_length=101, polyorder=3)
+    >>> detrended = spectrum - trend
+    """
+    y = np.asarray(y, dtype=np.float64)
+    
+    # Create working copy with mask for rejected points
+    y_work = y.copy()
+    
+    for iteration in range(max_iter):
+        # Apply fast savgol filter
+        y_smooth = _savgol_interp_nan(y_work, window_length, polyorder)
+        
+        # Compute residuals
+        residuals = y_work - y_smooth
+        
+        # Robust RMS from 16th-84th percentile (equivalent to 1-sigma for Gaussian)
+        valid_resid = residuals[np.isfinite(residuals)]
+        if len(valid_resid) < 10:
+            break
+        
+        p16, p84 = np.percentile(valid_resid, [16, 84])
+        rms = (p84 - p16) / 2.0
+        
+        if rms == 0:
+            break
+        
+        # Identify outliers
+        outliers = np.abs(residuals) > n_sigma * rms
+        n_outliers = np.sum(outliers & np.isfinite(y_work))
+        
+        if n_outliers == 0:
+            break
+        
+        # Mask outliers for next iteration
+        y_work[outliers] = np.nan
+    
+    # Final pass with all outliers masked
+    y_filtered = _savgol_interp_nan(y_work, window_length, polyorder)
+    
+    return y_filtered
+
+
 # ============================================================================
 # Template Management
 # ============================================================================
@@ -1985,17 +2092,12 @@ def get_interpolated_absorption(molecule: str, exponent: float,
     else:
         t = (np.log(expo_clamped) - np.log(expo_below)) / (np.log(expo_above) - np.log(expo_below))
     
-    # Interpolate in exponent space on reference grid FIRST
-    # This is more efficient than splining twice: we do weighted mean on the 
-    # master grid, then a single spline to the observation grid
+    # Interpolate transmission and weights
     trans_interp = (1 - t) * data_below['transmission'] + t * data_above['transmission']
     weights_interp = (1 - t) * data_below['weights'] + t * data_above['weights']
     
     # Resample to target wavelength grid if different from reference
-    # The precomputed grid is on waveref (master grid), observation wavelengths
-    # vary slightly due to barycentric correction and drift
     if wave is not None and not np.allclose(wave, _precomputed_waveref):
-        # Single spline interpolation to observation wavelength grid
         trans_out = np.zeros_like(wave)
         weights_out = np.zeros_like(wave)
         for iord in range(wave.shape[0]):

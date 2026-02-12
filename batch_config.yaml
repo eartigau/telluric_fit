@@ -24,7 +24,7 @@ machines:
 # Batch settings (common to all machines)
 # =============================================================================
 batch:
-  name: 'skypca_v5'                # Batch identifier
+  name: 'update25Feb11'                # Batch identifier
   telluric_config: 'telluric_config.yaml'  # Path to telluric parameters
   generate_plots: true             # Generate diagnostic PDF plots
   plot_orders: [30, 60]            # Order range for plots [min, max], null for all

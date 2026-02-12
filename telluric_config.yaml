@@ -8,17 +8,54 @@ template_style: 'model'          # model or self
 # Hot stars used for telluric fitting
 # These objects have featureless spectra ideal for measuring atmospheric absorption
 hot_stars:
+  - 15PEG
+  - 17PEG
+  - 23LMI
+  - 24LYN
+  - 31CAS
+  - 33LYN
+  - 51DRA
+  - 59PEG
+  - 74PSCB
+  - 82UMA
+  - BETSER
+  - CHICAP
+  - ETAPYX
+  - GAMSCT
+  - GAMTRI
+  - HD130917
+  - HD159170
   - HD195094
+  - HR1314
+  - HR1832
   - HR1903
+  - HR2180
+  - HR2209
   - HR3117
   - HR3131
   - HR3314
   - HR4023
   - HR4467
+  - HR4468
+  - HR4687
+  - HR4722
+  - HR4889
+  - HR5107
+  - HR5671
+  - HR6025
   - HR6743
   - HR7590
+  - HR7830
+  - HR806
+  - HR8489
   - HR8709
   - HR9098
+  - IOTCYG
+  - LLEO
+  - OMICAPA
+  - PHILEO
+  - PI02ORI
+  - ZETLEP
   - ZETVIR
 
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)
@@ -59,7 +96,7 @@ weighting:
 molecules:
   H2O:
     depth_max: 0.6
-    depth_saturated: 0.4
+    depth_saturated: 0.5
     reject_saturated: 0.8
   CH4:
     depth_max: 0.5
@@ -89,5 +126,5 @@ quality_control:
 # Paper figures output folder
 # Set paper_figures: true to generate one representative figure per processing step
 paper_figures:
-  enabled: false                   # Set to true to generate paper figures
+  enabled: true                   # Set to true to generate paper figures
   output_dir: 'paper_figures'      # Folder for paper-quality figures (relative to project_path)

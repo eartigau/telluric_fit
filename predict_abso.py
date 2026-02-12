@@ -220,10 +220,13 @@ def compute_initial_exponents(hdr: fits.Header, model: Dict, hdr_tapas: fits.Hea
     pressure_norm = hdr['PRESSURE'] / hdr_tapas['PAMBIENT']
     mjd = hdr['MJDMID']
 
-    # O2 absorption (depends on airmass, temperature, pressure)
-    params = [model['O2_AIRMASS_EXP'], model['O2_TEMPERATURE_EXP'],
-              model['O2_PRESSURE_EXP'], model['O2_INTERCEPT']]
-    o2_airm = airmass**params[0] * temperature**params[1] * pressure_norm**params[2] + params[3]
+    # O2 absorption (includes seasonal variation, like CO2/CH4)
+    params = [model['O2_SLOPE'], model['O2_INTERCEPT'], model['O2_AMP'],
+              model['O2_PHASE'], model['O2_AIRMASS_EXP'], model['O2_TEMPERATURE_EXP'],
+              model['O2_PRESSURE_EXP']]
+    o2_airm = (params[0] * mjd + params[1] +
+               params[2] * np.cos(2.0 * np.pi * (mjd % 365.24) / 365.24 + params[3]))
+    o2_airm = o2_airm * airmass**params[4] * temperature**params[5] * pressure_norm**params[6]
     expo_o2 = o2_airm * airmass * pressure_norm
 
     # CO2 absorption (includes seasonal + long-term trend)
@@ -501,7 +504,7 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     if rms_excess_factor < 1.5:
         raise ValueError(f'rms_excess_factor ({rms_excess_factor}) must be >= 1.5')
 
-    tprint(f'  Processing {os.path.basename(file)}')
+    tprint(f'  Processing {file}')
 
     # Get file metadata
     try:
@@ -941,8 +944,8 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     return True
 
 
-def main(batch_name: str = 'skypca_v5', instrument: str = 'NIRPS',
-         obj: str = 'TOI4552', template_style: str = 'model',
+def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
+         obj: Optional[str] = None, template_style: Optional[str] = None,
          force_recompute: bool = False):
     """
     Main processing function with batch configuration.
@@ -960,6 +963,30 @@ def main(batch_name: str = 'skypca_v5', instrument: str = 'NIRPS',
     force_recompute : bool
         Force recomputation of precomputed absorption grid
     """
+    # Load defaults from batch_config.yaml if parameters not provided
+    batch_yaml = load_batch_config_yaml()
+    
+    if batch_name is None:
+        if 'batch' in batch_yaml and isinstance(batch_yaml['batch'], dict):
+            batch_name = batch_yaml['batch'].get('name', 'skypca_v5')
+        else:
+            batch_name = batch_yaml.get('batch_name', 'skypca_v5')
+    
+    if instrument is None:
+        instrument = batch_yaml.get('instrument', 'NIRPS')
+    
+    if template_style is None:
+        template_style = batch_yaml.get('template_style', 'model')
+    
+    if obj is None:
+        objects_list = batch_yaml.get('objects', [])
+        if objects_list and isinstance(objects_list[0], dict):
+            obj = objects_list[0].get('name', 'TOI4552')
+        elif objects_list:
+            obj = str(objects_list[0])
+        else:
+            obj = 'TOI4552'
+    
     # Load configuration
     config = get_batch_config(batch_name, instrument, obj, template_style)
     tprint(f"{'='*60}")
@@ -1086,7 +1113,7 @@ def main(batch_name: str = 'skypca_v5', instrument: str = 'NIRPS',
     else:
         # Serial processing
         for i, file in enumerate(files):
-            tprint(f"[{i+1}/{len(files)}] Processing {obj}: {os.path.basename(file)}")
+            tprint(f"[{i+1}/{len(files)}] Processing {obj}: {file}")
 
             success = process_single_file(
                 file, config, spl, spl_dv, sky_dict, waveref, all_abso,
@@ -1136,22 +1163,70 @@ def main(batch_name: str = 'skypca_v5', instrument: str = 'NIRPS',
 
 
 
+def load_batch_config_yaml(config_path: str = 'batch_config.yaml') -> dict:
+    """
+    Load batch configuration from YAML file.
+    
+    Parameters
+    ----------
+    config_path : str
+        Path to the batch config YAML file
+    
+    Returns
+    -------
+    config : dict
+        Configuration dictionary with batch settings
+    """
+    # Try relative to script directory first
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    full_path = os.path.join(script_dir, config_path)
+    
+    if not os.path.exists(full_path):
+        full_path = config_path
+    
+    if os.path.exists(full_path):
+        with open(full_path, 'r') as f:
+            return yaml.safe_load(f)
+    
+    return {}
+
+
 if __name__ == '__main__':
+    # Load batch_config.yaml to get defaults
+    batch_yaml = load_batch_config_yaml()
+    
+    # Extract defaults from batch_config.yaml
+    if 'batch' in batch_yaml and isinstance(batch_yaml['batch'], dict):
+        default_batch_name = batch_yaml['batch'].get('name', 'skypca_v5')
+    else:
+        default_batch_name = batch_yaml.get('batch_name', 'skypca_v5')
+    default_instrument = batch_yaml.get('instrument', 'NIRPS')
+    default_template = batch_yaml.get('template_style', 'model')
+    
+    # Get first object from objects list if available
+    objects_list = batch_yaml.get('objects', [])
+    if objects_list and isinstance(objects_list[0], dict):
+        default_object = objects_list[0].get('name', 'TOI4552')
+    elif objects_list:
+        default_object = str(objects_list[0])
+    else:
+        default_object = 'TOI4552'
+    
     # Command-line interface
     parser = argparse.ArgumentParser(
         description='Telluric absorption correction pipeline',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument('--config', type=str, default=None,
-                       help='YAML configuration file for batch processing')
-    parser.add_argument('--batch', type=str, default='skypca_v5',
+                       help='YAML configuration file for batch processing (default: uses batch_config.yaml)')
+    parser.add_argument('--batch', type=str, default=default_batch_name,
                        help='Batch name identifier')
-    parser.add_argument('--instrument', type=str, default='NIRPS',
+    parser.add_argument('--instrument', type=str, default=default_instrument,
                        choices=['NIRPS', 'SPIROU'],
                        help='Instrument name')
-    parser.add_argument('--object', type=str, default='TOI4552',
+    parser.add_argument('--object', type=str, default=default_object,
                        help='Object name')
-    parser.add_argument('--template', type=str, default='model',
+    parser.add_argument('--template', type=str, default=default_template,
                        choices=['model', 'self'],
                        help='Template style')
     parser.add_argument('--list-objects', action='store_true',
@@ -1180,7 +1255,11 @@ if __name__ == '__main__':
             tprint(f"ERROR: Failed to parse config file: {e}", color='red')
             sys.exit(1)
         
-        batch_name = config.get('batch_name', 'skypca_v5')
+        # Support both flat 'batch_name' and nested 'batch.name' structure
+        if 'batch' in config and isinstance(config['batch'], dict):
+            batch_name = config['batch'].get('name', 'skypca_v5')
+        else:
+            batch_name = config.get('batch_name', 'skypca_v5')
         instrument = config.get('instrument', 'NIRPS')
         template_style = config.get('template_style', 'model')
         objects = config.get('objects', [])
