@@ -35,7 +35,8 @@ The `sync_{INSTRUMENT}` script uses `rsync` to copy required data files from rem
 
 - **Hot star data**: Reference hot stars for telluric fitting (flattened structure)
   - Destination: `hotstars_NIRPS/` or `hotstars_SPIROU/`
-  - Objects: `HD195094`, `HR8709`, `HR1903`, `HR3117`, `HR4023`, `HR9098`, `HR3314`, `HR4467`, `HR7590`, `ZETVIR`
+  - Objects: Defined in `telluric_config.yaml` under `hot_stars:` key
+  - Current list includes: `15PEG`, `17PEG`, `23LMI`, `24LYN`, `31CAS`, `33LYN`, `51DRA`, `59PEG`, `74PSCB`, `82UMA`, `BETSER`, `CHICAP`, `ETAPYX`, `GAMSCT`, `GAMTRI`, `HD130917`, `HD159170`, `HD195094`, `HR1314`, `HR1832`, `HR1903`, `HR2180`, `HR2209`, `HR3117`, `HR3131`, `HR3314`, `HR4023`, `HR4467`, `HR4468`, `HR4687`, `HR4722`, `HR4889`, `HR5107`, `HR5671`, `HR6025`, `HR6743`, `HR7590`, `HR7830`, `HR806`, `HR8489`, `HR8709`, `HR9098`, `IOTCYG`, `LLEO`, `OMICAPA`, `PHILEO`, `PI02ORI`, `ZETLEP`, `ZETVIR`
   - Files: All `*_e2dsff_A.fits` files matching these objects
 
 ### Output
@@ -309,7 +310,7 @@ If a step fails:
 
 | Step | Command | Input | Output |
 |------|---------|-------|--------|
-| 1. Sync | `bash sync` | Remote servers | `calib_*/`, `scidata_*/`, `hotstars_*/` |
+| 1. Sync | `bash sync_{INSTRUMENT}` | Remote servers | `calib_*/`, `scidata_*/`, `hotstars_*/` |
 | 2. Hot Star Fit | `python smart_fit.py` | Hot star spectra | `tellu_fit_NIRPS/` |
 | 3. Statistics | `python compil_stats.py` | Hot star headers | `params_fit_tellu_NIRPS.csv` |
 | 4. Residuals | `python residuals.py` | `tellu_fit_NIRPS/` | `residuals_NIRPS/` |
