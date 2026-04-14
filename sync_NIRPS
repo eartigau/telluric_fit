@@ -19,6 +19,7 @@ echo "========================================"
 echo ""
 echo "[1/3] Calibrations -> $DST_CALIB"
 rsync -av --progress \
+  --include='*/' \
   --include='*wave_fplines_A.fits' \
   --include='*wave_hclines_A.fits' \
   --include='*wavesol_ref_A.fits' \

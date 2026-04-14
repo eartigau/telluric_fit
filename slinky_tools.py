@@ -184,11 +184,17 @@ def search_fits_with_mjd(search_string, mjdkey='MJDMID'):
     if not files:
         return np.array([]), np.array([])
     tprint(f'    Lecture des entêtes MJD : {len(files)} fichiers ({os.path.basename(search_string)})...', color='green')
-    mjds = np.zeros(len(files))
+    mjds = np.full(len(files), np.nan)
     for i, f in enumerate(tqdm(files, leave=False, desc='MJD headers')):
-        mjds[i] = fits.getheader(f)[mjdkey]
+        try:
+            mjds[i] = fits.getheader(f)[mjdkey]
+        except (OSError, KeyError):
+            tprint(f'    Avertissement : fichier ignoré (corrompu ou MJD absent) : {f}', color='yellow')
+    valid = np.isfinite(mjds)
+    files = np.array(files)[valid]
+    mjds = mjds[valid]
     order = np.argsort(mjds)
-    return np.array(files)[order], mjds[order]
+    return files[order], mjds[order]
 
 
 def mjd_to_matplotlib_date(mjd):
