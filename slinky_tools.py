@@ -181,8 +181,11 @@ def sigma(v):
 def search_fits_with_mjd(search_string, mjdkey='MJDMID'):
     """Glob *search_string*, return files sorted by MJD."""
     files = glob.glob(search_string)
+    if not files:
+        return np.array([]), np.array([])
+    tprint(f'    Lecture des entêtes MJD : {len(files)} fichiers ({os.path.basename(search_string)})...', color='green')
     mjds = np.zeros(len(files))
-    for i, f in enumerate(files):
+    for i, f in enumerate(tqdm(files, leave=False, desc='MJD headers')):
         mjds[i] = fits.getheader(f)[mjdkey]
     order = np.argsort(mjds)
     return np.array(files)[order], mjds[order]
@@ -736,6 +739,7 @@ def run_slinky(science_files=None):
         Explicit list of science files to patch after refinement.
         If None, auto-discovered from scidata/hotstars directories.
     """
+    tprint('[SLINKY] Chargement de tellu_tools...', color='green')
     import tellu_tools as tt
     config = tt.load_telluric_config()
     params = _get_slinky_params(config)
