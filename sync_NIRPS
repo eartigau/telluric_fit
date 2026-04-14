@@ -8,9 +8,17 @@ DST_SCIDATA="scidata_NIRPS/"
 DST_HOTSTARS="hotstars_NIRPS/"
 mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS"
 
+echo "========================================"
+echo "  sync_NIRPS"
+echo "  Source : $SRC_BASE"
+echo "  Dest   : $(pwd)"
+echo "========================================"
+
 # Synchroniser tous les fichiers de calibration nécessaires
 # (--include/--exclude : rsync gère le matching, pas le shell — compatible SSH)
-rsync -av \
+echo ""
+echo "[1/3] Calibrations -> $DST_CALIB"
+rsync -av --progress \
   --include='*wave_fplines_A.fits' \
   --include='*wave_hclines_A.fits' \
   --include='*wavesol_ref_A.fits' \
@@ -18,9 +26,11 @@ rsync -av \
   --include='*_e2dsff_A_wave_night_A.fits' \
   --exclude='*' \
   "$SRC_CALIB/" "$DST_CALIB"
+echo "[1/3] Calibrations OK"
 
 # Sync science objects — uniquement les cibles listées dans science_targets du YAML
-# Lire la liste depuis telluric_config.yaml avec Python
+echo ""
+echo "[2/3] Chargement de science_targets depuis telluric_config.yaml..."
 SCIENCE_TARGETS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
@@ -30,31 +40,38 @@ print(' '.join(cfg.get('science_targets', [])))
 if [ ${#SCIENCE_TARGETS[@]} -eq 0 ]; then
     echo "Attention : aucune cible dans science_targets du YAML, aucun objet scientifique synchronisé."
 else
-    echo "Cibles scientifiques à synchroniser : ${SCIENCE_TARGETS[*]}"
+    echo "[2/3] Cibles scientifiques : ${SCIENCE_TARGETS[*]}"
     for target in "${SCIENCE_TARGETS[@]}"; do
         if [ -d "$SRC_OBJECTS/$target" ]; then
-            echo "Syncing $target..."
+            echo "  -> $target"
             mkdir -p "$DST_SCIDATA/$target"
-            rsync -av "$SRC_OBJECTS/$target/"*_e2dsff_A.fits "$DST_SCIDATA/$target/" 2>/dev/null || true
+            rsync -av --progress "$SRC_OBJECTS/$target/"*_e2dsff_A.fits "$DST_SCIDATA/$target/" 2>/dev/null || true
         else
-            echo "Avertissement : $target introuvable dans $SRC_OBJECTS"
+            echo "  Avertissement : $target introuvable dans $SRC_OBJECTS"
         fi
     done
 fi
+echo "[2/3] Objets science OK"
 
 # Copy hotstars (flattened - no subdirectories)
-# Hot star list lu depuis telluric_config.yaml
+echo ""
+echo "[3/3] Chargement de hot_stars depuis telluric_config.yaml..."
 HOT_STARS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
 "))
 
+echo "[3/3] ${#HOT_STARS[@]} étoiles telluriques à synchroniser"
 for star in "${HOT_STARS[@]}"; do
     if [ -d "$SRC_OBJECTS/$star" ]; then
-        echo "Copying $star..."
-        rsync -av "$SRC_OBJECTS/$star/"*_e2dsff_A.fits "$DST_HOTSTARS" 2>/dev/null || true
+        echo "  -> $star"
+        rsync -av --progress "$SRC_OBJECTS/$star/"*_e2dsff_A.fits "$DST_HOTSTARS" 2>/dev/null || true
     fi
 done
+echo "[3/3] Étoiles telluriques OK"
 
-echo "Done syncing NIRPS."
+echo ""
+echo "========================================"
+echo "  sync_NIRPS terminé."
+echo "========================================"
