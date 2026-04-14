@@ -718,19 +718,21 @@ def padding_wavesol(params, science_files=None):
 # Main entry points
 # ============================================================================
 
-def run_slinky(config_path='telluric_config.yaml', science_files=None):
+def run_slinky(science_files=None):
     """
     Full slinky pipeline: refine wavelength solutions then patch science files.
 
+    Reads configuration from telluric_config.yaml (resolved relative to this
+    module's location, same as the rest of the pipeline).
+
     Parameters
     ----------
-    config_path : str
-        Path to telluric_config.yaml.
     science_files : list of str, optional
         Explicit list of science files to patch after refinement.
         If None, auto-discovered from scidata/hotstars directories.
     """
-    config = load_yaml(config_path)
+    import tellu_tools as tt
+    config = tt.load_telluric_config()
     params = _get_slinky_params(config)
     tprint(f'[SLINKY] Starting for {params["instrument"]}', color='green')
     refine_wavesol(params)
