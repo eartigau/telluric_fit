@@ -697,7 +697,12 @@ def padding_wavesol(params, science_files=None):
     for ifile, file in enumerate(science_files):
         try:
             tprint(f'  Padding {ifile+1}/{len(science_files)}: {os.path.basename(file)}', color='green')
-            hdr = fits.getheader(file, ext=1)
+            hdr0 = fits.getheader(file, ext=0)
+            hdr1 = fits.getheader(file, ext=1)
+            hdr = {**dict(hdr1), **dict(hdr0)}  # ext=0 prend priorité
+            if WAVEFILE_KEY not in hdr:
+                tprint(f'    Clé "{WAVEFILE_KEY}" absente de l\'entête, fichier ignoré', color='yellow')
+                continue
             wavefile = hdr[WAVEFILE_KEY]
 
             keep = np.array([wavefile in w for w in all_wave_sol_files])
