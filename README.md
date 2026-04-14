@@ -50,7 +50,7 @@ The `sync_{INSTRUMENT}` script uses `rsync` to copy required data files from rem
 
 ### Command
 ```bash
-python -c "from slinky_tools import run_slinky; run_slinky()"
+python slinky_tools.py
 ```
 
 ### What It Does
