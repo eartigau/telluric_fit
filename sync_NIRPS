@@ -8,18 +8,16 @@ DST_SCIDATA="scidata_NIRPS/"
 DST_HOTSTARS="hotstars_NIRPS/"
 mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS"
 
-# Synchroniser les fichiers FP (Fabry-Perot)
-rsync -av "$SRC_CALIB"/*wave_fplines_A.fits "$DST_CALIB"
-
-# Synchroniser les fichiers HC (Hollow Cathode)
-rsync -av "$SRC_CALIB"/*wave_hclines_A.fits "$DST_CALIB"
-
-# Synchroniser les fichiers de référence
-rsync -av "$SRC_CALIB"/*wavesol_ref_A.fits "$DST_CALIB" || true
-cp -v "$SRC_CALIB"/*waveref_hclines*A.fits "$DST_CALIB"
-
-# Synchroniser les fichiers night wave
-rsync -av "$SRC_CALIB"/*_e2dsff_A_wave_night_A.fits "$DST_CALIB"
+# Synchroniser tous les fichiers de calibration nécessaires
+# (--include/--exclude : rsync gère le matching, pas le shell — compatible SSH)
+rsync -av \
+  --include='*wave_fplines_A.fits' \
+  --include='*wave_hclines_A.fits' \
+  --include='*wavesol_ref_A.fits' \
+  --include='*waveref_hclines*A.fits' \
+  --include='*_e2dsff_A_wave_night_A.fits' \
+  --exclude='*' \
+  "$SRC_CALIB/" "$DST_CALIB"
 
 # Sync science objects — uniquement les cibles listées dans science_targets du YAML
 # Lire la liste depuis telluric_config.yaml avec Python
