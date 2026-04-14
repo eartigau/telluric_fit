@@ -458,7 +458,8 @@ def refine_wavesol(params):
         file_fp = files_fp[i_fp]
         hdr = fits.getheader(file_fp)
         wavefile = os.path.join(calib_dir, hdr['WAVEFILE'])
-        patched_wavefile = os.path.join(patched_dir, hdr['WAVEFILE'])
+        slinky_name = hdr['WAVEFILE'].replace('.fits', '_slinky.fits')
+        patched_wavefile = os.path.join(patched_dir, slinky_name)
 
         hdr_fp = fits.getheader(file_fp)
         tbl_fp = Table.read(file_fp, 'WAVE_FPLIST')
@@ -470,8 +471,12 @@ def refine_wavesol(params):
         err_pedestal_hc = all_errpedestals[i_hc]
 
         if os.path.isfile(patched_wavefile):
-            tprint(f'    Already patched, skipping', color='yellow')
-            continue
+            if os.path.getmtime(patched_wavefile) >= os.path.getmtime(wavefile):
+                tprint(f'    Already patched and up-to-date, skipping', color='yellow')
+                continue
+            else:
+                tprint(f'    Source wavesol newer than slinky file, regenerating', color='yellow')
+                os.remove(patched_wavefile)
 
         # Apply cavity correction
         wavelength_model = np.array(tbl_fp['WAVE_REF'].data)
@@ -686,7 +691,7 @@ def padding_wavesol(params, science_files=None):
         tprint(f'[SLINKY] No science files found to patch for {instrument}', color='red')
         return
 
-    all_wave_sol_files = np.array(glob.glob(os.path.join(patched_dir, '*.fits')))
+    all_wave_sol_files = np.array(glob.glob(os.path.join(patched_dir, '*_slinky.fits')))
     if len(all_wave_sol_files) == 0:
         tprint(f'[SLINKY] No patched wavesol files in {patched_dir}. Run refine_wavesol first.',
                color='red')
@@ -704,8 +709,9 @@ def padding_wavesol(params, science_files=None):
                 tprint(f'    Clé "{WAVEFILE_KEY}" absente de l\'entête, fichier ignoré', color='yellow')
                 continue
             wavefile = hdr[WAVEFILE_KEY]
+            slinky_name = wavefile.replace('.fits', '_slinky.fits')
 
-            keep = np.array([wavefile in w for w in all_wave_sol_files])
+            keep = np.array([slinky_name in w for w in all_wave_sol_files])
             if True not in keep:
                 tprint(f'    No patched wavesol for {wavefile}, skipping', color='red')
                 continue
