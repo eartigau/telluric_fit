@@ -725,13 +725,9 @@ def padding_wavesol(params, science_files=None):
                 tprint(f'    Already exists, skipping', color='yellow')
                 continue
 
-            wave_sol_file = all_wave_sol_files[keep][0]
-            wavesol = fits.getdata(wave_sol_file)
-
             copyfile(file, outname_slinky)
-            hdu = fits.open(outname_slinky, mode='update')
-            hdu[f'Wave{fiber}'].data = wavesol
-            hdu.close()
+            with fits.open(outname_slinky, mode='update') as hdu:
+                hdu[0].header[WAVEFILE_KEY] = slinky_name
             tprint(f'    Wrote {outname_slinky}', color='green')
 
         except Exception as e:
