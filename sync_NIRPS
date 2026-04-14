@@ -16,7 +16,7 @@ rsync -av "$SRC_CALIB"/*wave_hclines_A.fits "$DST_CALIB"
 
 # Synchroniser les fichiers de référence
 rsync -av "$SRC_CALIB"/*wavesol_ref_A.fits "$DST_CALIB" || true
-rsync -av "$SRC_CALIB"/*_waveref_hclines_A.fits "$DST_CALIB" || true
+cp -v "$SRC_CALIB"/*waveref_hclines*A.fits "$DST_CALIB"
 
 # Synchroniser les fichiers night wave
 rsync -av "$SRC_CALIB"/*_e2dsff_A_wave_night_A.fits "$DST_CALIB"
