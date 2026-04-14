@@ -1,8 +1,12 @@
 
 # Synchronisation des fichiers FP et HC pour NIRPS
-SRC_CALIB="/home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/calib"
+SRC_BASE="/scratch/eartigau/nirps_tempo"
+SRC_CALIB="$SRC_BASE/calib"
+SRC_OBJECTS="$SRC_BASE/objects"
 DST_CALIB="calib_NIRPS/"
-mkdir -p "$DST_CALIB"
+DST_SCIDATA="scidata_NIRPS/"
+DST_HOTSTARS="hotstars_NIRPS/"
+mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS"
 
 # Synchroniser les fichiers FP (Fabry-Perot)
 rsync -av "$SRC_CALIB"/*wave_fplines_A.fits "$DST_CALIB"
@@ -17,14 +21,13 @@ rsync -av "$SRC_CALIB"/*waveref_hclines*A.fits "$DST_CALIB"
 # Synchroniser les fichiers night wave
 rsync -av "$SRC_CALIB"/*_e2dsff_A_wave_night_A.fits "$DST_CALIB"
 
-rsync -av /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/calib/*_e2dsff_A_wave_night_A.fits /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/calib_NIRPS/
-
+# Sync science objects
 rsync -av \
   --include='*/' \
   --include='**/*_e2dsff_A.fits' \
   --exclude='*' \
-  /home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects/ \
-  /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/scidata_NIRPS/
+  "$SRC_OBJECTS/" \
+  "$DST_SCIDATA"
 
 # Copy hotstars (flattened - no subdirectories)
 # Hot star list from telluric_config.yaml
@@ -35,15 +38,10 @@ HOT_STARS=(15PEG 17PEG 23LMI 24LYN 31CAS 33LYN 51DRA 59PEG 74PSCB 82UMA \
            HR7590 HR7830 HR806 HR8489 HR8709 HR9098 IOTCYG LLEO OMICAPA \
            PHILEO PI02ORI ZETLEP ZETVIR)
 
-SRC="/home/eartigau/projects/rrg-rdoyon/nirps/etienne_temporary/objects"
-DST="/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/hotstars_NIRPS"
-
-mkdir -p "$DST"
-
 for star in "${HOT_STARS[@]}"; do
-    if [ -d "$SRC/$star" ]; then
+    if [ -d "$SRC_OBJECTS/$star" ]; then
         echo "Copying $star..."
-        rsync -av "$SRC/$star/"*_e2dsff_A.fits "$DST/" 2>/dev/null || true
+        rsync -av "$SRC_OBJECTS/$star/"*_e2dsff_A.fits "$DST_HOTSTARS" 2>/dev/null || true
     fi
 done
 

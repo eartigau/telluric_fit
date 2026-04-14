@@ -123,6 +123,16 @@ quality_control:
   # Minimum allowed value is 1.5 (will raise error if set lower)
   rms_excess_factor: 2.0
 
+# =============================================================================
+# Slinky wavelength solution refinement
+# Corrects the cavity (slinky) effect in FP-based wavelength solutions.
+# Requires FP and HC line-list FITS files in calib_INSTRUMENT/ (see sync scripts).
+# =============================================================================
+slinky:
+  doplot: false                    # Show interactive diagnostic plots
+  wave_leverage: 1600              # Leverage point [nm] for linear fit
+  wslinky: 0.1                     # Autocorrelation length of GP kernel [nm]
+
 # Paper figures output folder
 # Set paper_figures: true to generate one representative figure per processing step
 paper_figures:

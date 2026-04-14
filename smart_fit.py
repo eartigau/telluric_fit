@@ -52,15 +52,6 @@ _paper_figure_done = {'fig1': False, 'fig2': False}
 
 
 def get_paper_figures_config():
-    def run_slinky_example():
-        """
-        Exemple d'appel à la logique slinky locale avec le yaml de configuration.
-        Les données scientifiques doivent être passées explicitement (ici: placeholder).
-        """
-        yaml_path = 'telluric_config.yaml'
-        # TODO: Remplacer par les vraies données scientifiques à passer au slinky
-        scientific_data = None
-        slinky_tools.run_slinky_from_yaml(yaml_path, scientific_data=scientific_data)
     """Get paper figures configuration from yaml.
     
     Returns
