@@ -117,13 +117,14 @@ def val_cheby(coeffs, xvector, domain):
 
 def gp_project(x, y, yerr, wslinky=1e-1, xmin=980, xmax=1850, npts=100000):
     """Project scattered data onto a regular grid with a Gaussian kernel."""
+    tprint(f'    GP projection: {len(x)} points sur {npts} pixels (wslinky={wslinky} nm)...', color='green')
     xv = np.linspace(xmin, xmax, npts)
     weights = np.full(npts, 1e-12)
     yv = np.zeros(npts)
 
     xvbis = xv / wslinky
     xbis = x / wslinky
-    for i in tqdm(range(len(x)), leave=False):
+    for i in tqdm(range(len(x)), leave=False, desc='GP kernel'):
         dd = xvbis - xbis[i]
         g = np.abs(dd) < 10
         dd2 = dd[g]
@@ -264,6 +265,7 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 1 – Compute cavity for each HC epoch
     # ------------------------------------------------------------------
+    tprint(f'[SLINKY] Étape 1/4 : calcul de la cavité pour {len(files_hc)} époques HC...', color='cyan')
     for i_hc in range(len(files_hc)):
         file_hc_updated = files_hc[i_hc].replace('.fits', '_slinky.fits')
         if os.path.isfile(file_hc_updated):
@@ -337,6 +339,7 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 2 – Build cavity statistics across epochs
     # ------------------------------------------------------------------
+    tprint(f'[SLINKY] Étape 2/4 : statistiques de cavité sur {len(files_hc)} époques...', color='cyan')
     tbl_hc_ref = Table.read(ref_file_hc)
     href = fits.getheader(ref_file_hc)
     cavity_polynomial = np.array([href[key] for key in href['WCAV0*'].keys()])
@@ -383,6 +386,7 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 3 – Measure zero-point & slope per HC epoch
     # ------------------------------------------------------------------
+    tprint(f'[SLINKY] Étape 3/4 : mesure du zéro-point et pente pour {len(files_hc)} époques HC...', color='cyan')
     all_slopes = np.zeros(len(files_hc), dtype=float)
     all_errslopes = np.zeros_like(all_slopes)
     all_pedestals = np.zeros_like(all_slopes)
@@ -434,6 +438,7 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 4 – Patch each FP wavelength solution
     # ------------------------------------------------------------------
+    tprint(f'[SLINKY] Étape 4/4 : correction de {len(files_fp)} solutions FP...', color='cyan')
     recovered_pedestal = np.zeros(len(files_fp), dtype=float)
     recovered_slope = np.zeros_like(recovered_pedestal)
     recovered_errslope = np.zeros_like(recovered_pedestal)
@@ -734,10 +739,14 @@ def run_slinky(science_files=None):
     import tellu_tools as tt
     config = tt.load_telluric_config()
     params = _get_slinky_params(config)
-    tprint(f'[SLINKY] Starting for {params["instrument"]}', color='green')
+    tprint(f'[SLINKY] Instrument : {params["instrument"]}', color='green')
+    tprint(f'[SLINKY] Calib dir  : {params["calib_dir"]}', color='green')
+    tprint(f'[SLINKY] Patched dir: {params["patched_wavesol"]}', color='green')
+    tprint(f'[SLINKY] --- Raffinement des solutions de longueur d\'onde ---', color='cyan')
     refine_wavesol(params)
+    tprint(f'[SLINKY] --- Padding des fichiers science ---', color='cyan')
     padding_wavesol(params, science_files=science_files)
-    tprint('[SLINKY] Done', color='green')
+    tprint('[SLINKY] Terminé.', color='green')
 
 
 if __name__ == '__main__':
