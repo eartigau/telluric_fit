@@ -135,9 +135,12 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
 
         wavefile = hdr['WAVEFILE']
 
-        # Get wavefile if missing
+        # Prefer slinky-patched wavesol if available, fall back to original
+        wave_path_patched = f'calib_{instrument}_patched/{wavefile}'
         wave_path = f'calib_{instrument}/{wavefile}'
-        if not os.path.exists(wave_path):
+        if os.path.exists(wave_path_patched):
+            wave_path = wave_path_patched
+        elif not os.path.exists(wave_path):
             if instrument == 'NIRPS':
                 cmd = f'scp rali:/cosmos99/nirps/apero-data/nirps_he_online/calib/{wavefile} calib_{instrument}/.'
                 tprint(f'Getting {wavefile} from rali...', color='blue')

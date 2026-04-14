@@ -93,6 +93,7 @@ def _get_slinky_params(config):
         'output_slinky': os.path.join(project_path, f'slinky_{instrument}_output'),
         'plot_folder': os.path.join(project_path, f'slinky_{instrument}_plots'),
         'hot_stars': config.get('hot_stars', []),
+        'science_targets': config.get('science_targets', []),
         'wave_leverage': slinky_cfg.get('wave_leverage', 1600),
         'wslinky': slinky_cfg.get('wslinky', 1e-1),
     }
@@ -643,14 +644,26 @@ def padding_wavesol(params, science_files=None):
     output_dir = params['output_slinky']
     WAVEFILE_KEY = params['WAVEFILE_KEY']
     hot_stars = params.get('hot_stars', [])
+    science_targets = params.get('science_targets', [])
 
     project_path = get_project_path()
 
     if science_files is None:
+        # Hot stars are always included
         patterns = [
-            os.path.join(project_path, f'scidata_{instrument}', '**', f'*_e2dsff_{fiber}.fits'),
             os.path.join(project_path, f'hotstars_{instrument}', f'*_e2dsff_{fiber}.fits'),
         ]
+        # If science_targets is set, only include those specific targets
+        if science_targets:
+            for target in science_targets:
+                patterns.append(
+                    os.path.join(project_path, f'scidata_{instrument}', target,
+                                 f'*_e2dsff_{fiber}.fits'))
+        else:
+            # No target list: include all science data
+            patterns.append(
+                os.path.join(project_path, f'scidata_{instrument}', '**',
+                             f'*_e2dsff_{fiber}.fits'))
         science_files = []
         for pat in patterns:
             science_files.extend(glob.glob(pat, recursive=True))

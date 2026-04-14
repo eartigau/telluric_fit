@@ -542,7 +542,10 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     hdr = tt.update_header(hdr)
     sp = fits.getdata(file)
     wavefile = hdr['WAVEFILE']
-    wave = fits.getdata(os.path.join(project_path, f'calib_{instrument}/{wavefile}'))
+    # Prefer slinky-patched wavesol if available, fall back to original
+    wave_path_patched = os.path.join(project_path, f'calib_{instrument}_patched/{wavefile}')
+    wave_path_orig = os.path.join(project_path, f'calib_{instrument}/{wavefile}')
+    wave = fits.getdata(wave_path_patched if os.path.exists(wave_path_patched) else wave_path_orig)
 
     # Load residual correction maps
     residual_intercept, residual_slope, residual_rms, residual_rms_envelope = initialize_residuals(
@@ -1203,15 +1206,6 @@ if __name__ == '__main__':
     default_instrument = batch_yaml.get('instrument', 'NIRPS')
     default_template = batch_yaml.get('template_style', 'model')
     
-    # Get first object from objects list if available
-    objects_list = batch_yaml.get('objects', [])
-    if objects_list and isinstance(objects_list[0], dict):
-        default_object = objects_list[0].get('name', 'TOI4552')
-    elif objects_list:
-        default_object = str(objects_list[0])
-    else:
-        default_object = 'TOI4552'
-    
     # Command-line interface
     parser = argparse.ArgumentParser(
         description='Telluric absorption correction pipeline',
@@ -1224,7 +1218,7 @@ if __name__ == '__main__':
     parser.add_argument('--instrument', type=str, default=default_instrument,
                        choices=['NIRPS', 'SPIROU'],
                        help='Instrument name')
-    parser.add_argument('--object', type=str, default=default_object,
+    parser.add_argument('--object', type=str, default=None,
                        help='Object name')
     parser.add_argument('--template', type=str, default=default_template,
                        choices=['model', 'self'],
@@ -1284,11 +1278,26 @@ if __name__ == '__main__':
             # Only recompute on first object
             args.recompute = False
     else:
-        # Run processing with command-line arguments
-        main(
-            batch_name=args.batch,
-            instrument=args.instrument,
-            obj=args.object,
-            template_style=args.template,
-            force_recompute=args.recompute
-        )
+        if args.object is not None:
+            # Explicit single-object run
+            objects_to_run = [args.object]
+        else:
+            # No --object given: use science_targets from telluric_config.yaml
+            telluric_cfg = tt.load_telluric_config()
+            objects_to_run = telluric_cfg.get('science_targets', [])
+            if not objects_to_run:
+                tprint("ERROR: No --object given and no science_targets in telluric_config.yaml",
+                       color='red')
+                sys.exit(1)
+            tprint(f"Using science_targets from telluric_config.yaml: {objects_to_run}",
+                   color='cyan')
+
+        for obj_name in objects_to_run:
+            main(
+                batch_name=args.batch,
+                instrument=args.instrument,
+                obj=obj_name,
+                template_style=args.template,
+                force_recompute=args.recompute
+            )
+            args.recompute = False

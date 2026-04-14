@@ -4,13 +4,14 @@ This document describes the complete workflow for processing spectroscopic data 
 
 ## Overview
 
-The pipeline has five main stages:
+The pipeline has six main stages:
 
 1. **Data Synchronization**: Copy calibration and science data from remote servers
-2. **Hot Star Telluric Fitting**: Determine telluric transmission from hot star spectra
-3. **Statistics Compilation**: Aggregate telluric parameters across all observations
-4. **Residual Modeling**: Build per-pixel empirical correction models from residuals
-5. **Per-Object Correction**: Apply telluric correction to science targets
+2. **Slinky Wavelength Refinement**: Correct the FP cavity (slinky) effect in wavelength solutions
+3. **Hot Star Telluric Fitting**: Determine telluric transmission from hot star spectra
+4. **Statistics Compilation**: Aggregate telluric parameters across all observations
+5. **Residual Modeling**: Build per-pixel empirical correction models from residuals
+6. **Per-Object Correction**: Apply telluric correction to science targets
 
 ---
 
@@ -45,7 +46,68 @@ The `sync_{INSTRUMENT}` script uses `rsync` to copy required data files from rem
 
 ---
 
-## Step 2: Hot Star Telluric Fitting
+## Step 2: Slinky Wavelength Refinement
+
+### Command
+```bash
+python -c "from slinky_tools import run_slinky; run_slinky()"
+```
+
+### What It Does
+
+The slinky step corrects the Fabry-Perot cavity (slinky) effect in wavelength solutions. FP-based wavelength calibrations drift due to cavity length variations; this step measures and removes that drift using paired FP and HC (hollow-cathode) line lists.
+
+#### Key Operations:
+
+1. **Match FP / HC line-list files by MJD** from `calib_INSTRUMENT/`
+2. **Compute cavity values** for each HC line using FP peak numbers
+3. **Measure zero-point and slope** of the cavity drift per epoch (iterative weighted fit with outlier rejection)
+4. **Patch each FP wavelength solution** with the refined cavity correction and Gaussian-kernel projection of per-line residuals
+5. **Replace wavelength extensions** in science and hot-star files with the corrected solutions
+
+### Configuration
+
+Slinky-specific parameters are in `telluric_config.yaml` under the `slinky:` section:
+
+| Parameter | Default | Description |
+|---|---|---|
+| `doplot` | `false` | Show interactive diagnostic plots |
+| `wave_leverage` | `1600` | Leverage wavelength [nm] for the linear fit |
+| `wslinky` | `0.1` | Autocorrelation length [nm] of the GP smoothing kernel |
+
+The list of science targets to patch is taken from the **top-level** `science_targets:` key in `telluric_config.yaml` (see [Top-level Keys](#top-level-keys) below). Hot stars are always included automatically regardless of this list. If `science_targets` is empty, all files in `scidata_INSTRUMENT/` are processed.
+
+### Required Input Files (in `calib_INSTRUMENT/`)
+- `*wave_fplines_{fiber}.fits` — FP line-position tables
+- `*wave_hclines_{fiber}.fits` — HC line-position tables
+- `*_wavesol_ref_{fiber}.fits` — Reference wavelength solution
+- `*waveref_hclines*{fiber}.fits` — HC reference line list
+
+These are synced automatically by `sync_NIRPS` / `sync_SPIROU`.
+
+### Output
+- **`calib_INSTRUMENT_patched/`**: Patched wavelength solution FITS files (used automatically by downstream steps)
+- **`slinky_INSTRUMENT_output/`**: Science files with the `Wave{fiber}` extension replaced by the slinky-corrected wavelength solution
+- **`slinky_INSTRUMENT_plots/`**: Diagnostic plots (cavity median, zero-point/slope trends, HC/FP residuals)
+
+### Data Flow
+Steps 3–6 (`smart_fit.py`, `predict_abso.py`) automatically prefer wave solutions from `calib_INSTRUMENT_patched/` when available, falling back to the original `calib_INSTRUMENT/` files if slinky has not been run.
+
+---
+
+## Top-level Keys
+
+These keys in `telluric_config.yaml` are **not** nested inside any section and control multiple pipeline steps:
+
+| Key | Description |
+|---|---|
+| `instrument` | Instrument name (`NIRPS` or `SPIROU`) |
+| `hot_stars` | List of hot-star object names used for telluric calibration (Step 3) |
+| `science_targets` | List of science-target object names processed through the full pipeline: slinky wavelength correction (Step 2) and telluric correction (Step 6). `python predict_abso.py` with no `--object` argument iterates over this list automatically. |
+
+---
+
+## Step 3: Hot Star Telluric Fitting
 
 ### Command
 ```bash
@@ -104,7 +166,7 @@ Airmass used: 1.034
 
 ---
 
-## Step 3: Statistics Compilation
+## Step 4: Statistics Compilation
 
 ### Command
 ```bash
@@ -145,7 +207,7 @@ This script aggregates telluric parameters from all hot star observations to cre
 
 ---
 
-## Step 4: Residual Modeling
+## Step 5: Residual Modeling
 
 ### Command
 ```bash
@@ -190,16 +252,27 @@ Without this step, `predict_abso.py` will still run but the post-correction will
 
 ---
 
-## Step 5: Per-Object Telluric Correction
+## Step 6: Per-Object Telluric Correction
 
 ### Command
 ```bash
+# Process all science_targets from telluric_config.yaml (default)
+python predict_abso.py
+
+# Process a single object explicitly
+python predict_abso.py --object PROXIMA
+
+# Process a custom list of objects from a separate config file
 python predict_abso.py --config objects_config.yaml
 ```
 
 ### What It Does
 
-This script applies the telluric correction to science target spectra using the models determined from hot stars. Processing multiple objects is controlled via a YAML configuration file.
+This script applies the telluric correction to science target spectra using the models determined from hot stars.
+
+**By default** (no `--object` argument), the script reads `science_targets:` from `telluric_config.yaml` and processes every object in that list in sequence. Pass `--object NAME` to override and process a single target.
+
+When using `--config`, the objects listed in that file are processed instead.
 
 #### Configuration File Format (`objects_config.yaml`)
 

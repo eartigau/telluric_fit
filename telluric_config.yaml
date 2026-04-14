@@ -58,6 +58,13 @@ hot_stars:
   - ZETLEP
   - ZETVIR
 
+# Science targets to process through the full pipeline
+# (telluric correction in predict_abso.py, slinky wavelength correction, etc.)
+# Analogous to hot_stars above: add one name per line.
+science_targets:
+  - PROXIMA
+  - GJ1
+
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)
 demo_order:
   NIRPS: 
