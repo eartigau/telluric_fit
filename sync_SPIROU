@@ -1,3 +1,22 @@
+
+# Synchronisation des fichiers FP et HC pour SPIROU
+SRC_CALIB="/home/eartigau/projects/rrg-rdoyon/spirou/etienne_temporary/calib"
+DST_CALIB="calib_SPIROU/"
+mkdir -p "$DST_CALIB"
+
+# Synchroniser les fichiers FP (Fabry-Perot)
+rsync -av "$SRC_CALIB"/*wave_fplines_A.fits "$DST_CALIB"
+
+# Synchroniser les fichiers HC (Hollow Cathode)
+rsync -av "$SRC_CALIB"/*wave_hclines_A.fits "$DST_CALIB"
+
+# Synchroniser les fichiers de référence
+rsync -av "$SRC_CALIB"/*wavesol_ref_A.fits "$DST_CALIB"
+rsync -av "$SRC_CALIB"/*waveref_hclines*A.fits "$DST_CALIB"
+
+# Synchroniser les fichiers night wave
+rsync -av "$SRC_CALIB"/*_e2dsff_A_wave_night_A.fits "$DST_CALIB"
+
 rsync -av /home/eartigau/projects/rrg-rdoyon/spirou/etienne_temporary/calib/*_e2dsff_A_wave_night_A.fits /home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit/calib_SPIROU/
 
 rsync -av \
