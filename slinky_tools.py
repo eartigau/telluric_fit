@@ -645,8 +645,17 @@ def refine_wavesol(params):
 
 def padding_wavesol(params, science_files=None):
     """
-    Replace the WaveA/WaveAB extension in science FITS files with the
-    patched (slinky-corrected) wavelength solution.
+    Update the WAVEFILE header keyword in science e2dsff FITS files to point
+    to the slinky-corrected wavelength solution.
+
+    .. note::
+        ``*_e2dsff_{fiber}.fits`` files do **not** contain a ``WaveA``/``WaveAB``
+        data extension — wavelength information is looked up from the file named
+        in the ``WAVEFILE`` header key.  This function therefore only updates
+        that header keyword; it does **not** attempt to read or write any wave
+        data extension.  The actual slinky-corrected wavelength grid is
+        embedded in ``_t.fits`` files at a later stage via
+        :func:`save_corrected_spectrum` (``predict_abso.py``).
 
     Parameters
     ----------

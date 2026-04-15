@@ -384,7 +384,7 @@ def apply_post_correction(sp_corr: np.ndarray, abso_scaling: np.ndarray,
 def save_corrected_spectrum(t_name: str, t_outname: str, sp_corr: np.ndarray,
                             abso: np.ndarray, post_correction: np.ndarray,
                             hdr: fits.Header, expos: List[float],
-                            molecules: List[str]) -> None:
+                            molecules: List[str], wave: np.ndarray) -> None:
     """
     Save corrected spectrum to FITS file.
 
@@ -406,6 +406,10 @@ def save_corrected_spectrum(t_name: str, t_outname: str, sp_corr: np.ndarray,
         Optimized exponents
     molecules : list
         Molecule names
+    wave : np.ndarray
+        Wavelength grid used for correction (slinky-corrected if available).
+        Written into the WaveA / WaveAB extension of the output file so that
+        the embedded wavelength solution matches the one actually used.
     """
     # Copy original file
     shutil.copyfile(t_name, t_outname)
@@ -446,6 +450,14 @@ def save_corrected_spectrum(t_name: str, t_outname: str, sp_corr: np.ndarray,
             hdul['Recon'].data = abso * np.exp(post_correction)
         else:
             hdul.append(fits.ImageHDU(data=abso * np.exp(post_correction), name='Recon'))
+
+        # WaveA / WaveAB extension: update with the wavelength solution actually
+        # used for correction (slinky-patched if available, original otherwise).
+        # _t.fits files always carry one of these extensions; e2dsff files do not.
+        for wave_ext_name in ('WaveA', 'WaveAB'):
+            if wave_ext_name in hdul:
+                hdul[wave_ext_name].data = wave
+                break
 
         hdul.flush()
 
@@ -654,7 +666,7 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
 
     # Save corrected spectrum
     save_corrected_spectrum(t_name, t_outname, sp_corr, abso, post_correction,
-                           hdr, expos, molecules)
+                           hdr, expos, molecules, wave)
 
     tprint(f'  Wrote corrected spectrum to {os.path.basename(t_outname)}')
 
