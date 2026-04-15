@@ -64,6 +64,9 @@ hot_stars:
 science_targets:
   - PROXIMA
   - GJ1
+  - GJ3618
+  - GJ717
+  - GJ3307
 
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)
 demo_order:
