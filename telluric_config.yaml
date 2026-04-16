@@ -67,6 +67,33 @@ science_targets:
   - GJ3618
   - GJ717
   - GJ3307
+  - GL406
+  - L230M188
+  - SCR_J1546M5534
+  - TIC304392811
+  - LP_851M346
+  - GJ_1028
+  - LP885M35
+  - DENIS_J104814_6M395606
+  - SIPS_J1259M4336
+  - LP_500M35
+  - GJ3252
+  - GJ3693
+  - GL299
+  - NLTT5556
+  - GJ3622
+  - LP888M18
+  - TEEGARDENS_STAR
+  - LP_938M71
+  - GJ3618
+  - GL406
+  - GJ1116A
+  - GJ1116B
+  - TIC190138951
+  - SCRJ1138M7721
+  - VB10
+  - LP_783M2
+
 
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)
 demo_order:
