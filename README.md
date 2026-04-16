@@ -2,6 +2,40 @@
 
 This document describes the complete workflow for processing spectroscopic data through the telluric correction pipeline. The pipeline consists of multiple sequential steps that progressively refine the telluric correction models.
 
+---
+
+## ⚡ TL;DR — Run Everything at Once
+
+To run all six pipeline steps in sequence with a single command:
+
+```bash
+python run_pipeline.py
+```
+
+The **batch name** is read from `batch_config.yaml` under `batch → name` (currently **`update25Feb11`**).  
+To use a different batch name without editing the YAML:
+
+```bash
+python run_pipeline.py --batch my_batch_name
+```
+
+Common flags:
+```bash
+python run_pipeline.py --skip-sync       # skip rsync (data already present)
+python run_pipeline.py --skip-slinky     # skip slinky wavelength correction
+python run_pipeline.py --only-telluric   # run only the final telluric correction step
+python run_pipeline.py --object PROXIMA  # process a single object instead of all science_targets
+python run_pipeline.py --instrument SPIROU
+```
+
+> To change the active batch name permanently, edit `batch_config.yaml`:
+> ```yaml
+> batch:
+>   name: 'my_new_batch_name'
+> ```
+
+---
+
 ## Overview
 
 The pipeline has six main stages:
