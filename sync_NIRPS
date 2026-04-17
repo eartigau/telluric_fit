@@ -7,25 +7,33 @@ SRC_OBJECTS="$SRC_BASE/objects"
 # Resolve script directory (works regardless of where the script is invoked from)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine project_path from batch_config.yaml (same machine-detection logic as Python)
+# Determine project_path from batch_config.yaml by checking detect_path for each machine
+BATCH_CONFIG="$SCRIPT_DIR/batch_config.yaml"
+if [ ! -f "$BATCH_CONFIG" ]; then
+    echo "ERROR: batch_config.yaml not found at $BATCH_CONFIG"
+    exit 1
+fi
+
 PROJECT_PATH=$(python3 -c "
 import yaml, os, sys
-script_dir = os.path.abspath('$SCRIPT_DIR')
-config_path = os.path.join(script_dir, 'batch_config.yaml')
-if not os.path.exists(config_path):
-    sys.exit('ERROR: batch_config.yaml not found in ' + script_dir)
-with open(config_path) as f:
+cfg_path = '$BATCH_CONFIG'
+with open(cfg_path) as f:
     config = yaml.safe_load(f)
-for name, mc in config.get('machines', {}).items():
+machines = config.get('machines', {})
+for name, mc in machines.items():
     detect_path = mc.get('detect_path', '')
     if detect_path and os.path.exists(detect_path):
         print(mc.get('project_path', detect_path))
         sys.exit(0)
-print('ERROR: No matching machine found in batch_config.yaml', file=sys.stderr)
+# No machine matched — print all candidates for diagnosis
+print('ERROR: No matching machine detected. Checked detect_path for:', file=sys.stderr)
+for name, mc in machines.items():
+    print(f'  {name}: {mc.get(\"detect_path\", \"(none)\")}', file=sys.stderr)
+print(f'None of these paths exist on this machine.', file=sys.stderr)
+print(f'Add or update your machine entry in: $BATCH_CONFIG', file=sys.stderr)
 sys.exit(1)
 ")
 if [ $? -ne 0 ]; then
-    echo "$PROJECT_PATH"
     exit 1
 fi
 
