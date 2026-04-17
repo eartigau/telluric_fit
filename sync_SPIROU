@@ -3,10 +3,36 @@
 SRC_BASE="/scratch/eartigau/spirou_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
-DST_CALIB="calib_SPIROU"
-DST_SCIDATA="scidata_SPIROU"
-DST_HOTSTARS="hotstars_SPIROU"
-DST_ORIG="orig_SPIROU"
+
+# Resolve script directory (works regardless of where the script is invoked from)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Determine project_path from batch_config.yaml (same machine-detection logic as Python)
+PROJECT_PATH=$(python3 -c "
+import yaml, os, sys
+script_dir = os.path.abspath('$SCRIPT_DIR')
+config_path = os.path.join(script_dir, 'batch_config.yaml')
+if not os.path.exists(config_path):
+    sys.exit('ERROR: batch_config.yaml not found in ' + script_dir)
+with open(config_path) as f:
+    config = yaml.safe_load(f)
+for name, mc in config.get('machines', {}).items():
+    detect_path = mc.get('detect_path', '')
+    if detect_path and os.path.exists(detect_path):
+        print(mc.get('project_path', detect_path))
+        sys.exit(0)
+print('ERROR: No matching machine found in batch_config.yaml', file=sys.stderr)
+sys.exit(1)
+")
+if [ $? -ne 0 ]; then
+    echo "$PROJECT_PATH"
+    exit 1
+fi
+
+DST_CALIB="$PROJECT_PATH/calib_SPIROU"
+DST_SCIDATA="$PROJECT_PATH/scidata_SPIROU"
+DST_HOTSTARS="$PROJECT_PATH/hotstars_SPIROU"
+DST_ORIG="$PROJECT_PATH/orig_SPIROU"
 mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS" "$DST_ORIG"
 
 echo ""
@@ -14,7 +40,7 @@ echo "========================================"
 echo "  sync_SPIROU"
 echo "  Source calib   : $SRC_CALIB"
 echo "  Source objects : $SRC_OBJECTS"
-echo "  Dest           : $(pwd)"
+echo "  Project path   : $PROJECT_PATH"
 echo "  Destination folders:"
 echo "    calibrations -> $DST_CALIB"
 echo "    science      -> $DST_SCIDATA"
@@ -24,10 +50,12 @@ echo "========================================"
 echo ""
 
 # Sync calibration files
-echo "[1/3] Calibrations -> $DST_CALIB"
+echo "[1/3] Calibrations"
+echo "  FROM : $SRC_CALIB"
+echo "  TO   : $DST_CALIB"
 echo "  Patterns : wave_fplines, wave_hclines, wavesol_ref, waveref_hclines, wave_night"
 rsync -av --progress \
-  --include='*/'\
+  --include='*/' \
   --include='*wave_fplines_AB.fits' \
   --include='*wave_hclines_AB.fits' \
   --include='*wavesol_ref_AB.fits' \
@@ -35,7 +63,7 @@ rsync -av --progress \
   --include='*_e2dsff_AB_wave_night_AB.fits' \
   --exclude='*' \
   "$SRC_CALIB/" "$DST_CALIB"
-echo "[1/3] Calibrations OK"
+echo "[1/3] Calibrations OK -> $DST_CALIB"
 echo ""
 
 # Sync science objects — only targets listed under science_targets in the YAML
@@ -56,10 +84,12 @@ else
         if [ -d "$SRC_OBJECTS/$target" ]; then
             N_E2DS=$(ls "$SRC_OBJECTS/$target/"*_e2dsff_AB.fits 2>/dev/null | wc -l | tr -d ' ')
             N_TFITS=$(ls "$SRC_OBJECTS/$target/"*t.fits 2>/dev/null | wc -l | tr -d ' ')
-            echo "  -> $target  (${N_E2DS} e2dsff, ${N_TFITS} t.fits available at source)"
-            echo "     Copying e2dsff -> $DST_SCIDATA/$target/"
+            echo "  -> $target"
+            echo "     FROM (e2dsff) : $SRC_OBJECTS/$target/  [${N_E2DS} fichiers]"
+            echo "     TO   (e2dsff) : $DST_SCIDATA/$target/"
             rsync -av --progress "$SRC_OBJECTS/$target/"*_e2dsff_AB.fits "$DST_SCIDATA/$target/" 2>/dev/null || true
-            echo "     Copying t.fits -> $DST_ORIG/$target/"
+            echo "     FROM (t.fits) : $SRC_OBJECTS/$target/  [${N_TFITS} fichiers]"
+            echo "     TO   (t.fits) : $DST_ORIG/$target/"
             rsync -av --progress "$SRC_OBJECTS/$target/"*t.fits "$DST_ORIG/$target/" 2>/dev/null || true
         else
             echo "  Warning: $target not found in $SRC_OBJECTS"
@@ -81,8 +111,9 @@ echo "[3/3] ${#HOT_STARS[@]} telluric star(s): ${HOT_STARS[*]}"
 for star in "${HOT_STARS[@]}"; do
     if [ -d "$SRC_OBJECTS/$star" ]; then
         N_E2DS=$(ls "$SRC_OBJECTS/$star/"*_e2dsff_AB.fits 2>/dev/null | wc -l | tr -d ' ')
-        echo "  -> $star  (${N_E2DS} e2dsff available at source)"
-        echo "     Copying e2dsff -> $DST_HOTSTARS"
+        echo "  -> $star"
+        echo "     FROM : $SRC_OBJECTS/$star/  [${N_E2DS} fichiers]"
+        echo "     TO   : $DST_HOTSTARS"
         rsync -av --progress "$SRC_OBJECTS/$star/"*_e2dsff_AB.fits "$DST_HOTSTARS" 2>/dev/null || true
     else
         echo "  Warning: $star not found in $SRC_OBJECTS"
