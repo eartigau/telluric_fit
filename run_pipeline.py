@@ -1,20 +1,20 @@
 """
-Superscript du pipeline de correction tellurique.
+Top-level driver for the telluric correction pipeline.
 
-Enchaîne les étapes suivantes pour NIRPS ou SPIROU :
-  1. rsync     : synchronisation des données (sync_NIRPS ou sync_SPIROU)
-  2. slinky    : raffinement de la solution de longueur d'onde (slinky_tools.run_slinky)
-  3. residuals : calcul des cartes de correction empirique (residuals.py)
-  4. telluric  : correction tellurique par objet (predict_abso.main)
+Runs the following steps in sequence for NIRPS or SPIROU:
+  1. rsync     : sync data from remote server (sync_NIRPS or sync_SPIROU)
+  2. slinky    : wavelength solution refinement (slinky_tools.run_slinky)
+  3. residuals : build empirical per-pixel correction maps (residuals.py)
+  4. telluric  : per-object telluric correction (predict_abso.main)
 
 Usage
 -----
-    python run_pipeline.py                   # toutes les étapes, instrument dans telluric_config.yaml
+    python run_pipeline.py                   # all steps; instrument read from telluric_config.yaml
     python run_pipeline.py --skip-sync       # skip rsync
     python run_pipeline.py --skip-slinky     # skip slinky
     python run_pipeline.py --skip-residuals  # skip residuals
-    python run_pipeline.py --only-telluric   # seulement la correction tellurique
-    python run_pipeline.py --object PROXIMA  # un seul objet (sinon science_targets du YAML)
+    python run_pipeline.py --only-telluric   # run only the telluric correction step
+    python run_pipeline.py --object PROXIMA  # process a single object (default: science_targets from YAML)
     python run_pipeline.py --instrument SPIROU
 """
 
@@ -33,7 +33,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def _tprint(msg, color=None):
-    """Affiche un message avec horodatage."""
+    """Print a timestamped message."""
     ts = time.strftime('%H:%M:%S')
     print(f'[{ts}] {msg}', flush=True)
 
@@ -56,16 +56,16 @@ def _step_header(title):
 # ---------------------------------------------------------------------------
 
 def run_sync(instrument):
-    _step_header(f'ÉTAPE 1/4 — SYNC ({instrument})')
+    _step_header(f'STEP 1/4 — SYNC ({instrument})')
     sync_script = os.path.join(SCRIPT_DIR, f'sync_{instrument}')
     if not os.path.exists(sync_script):
-        _tprint(f'Script {sync_script} introuvable — sync ignoré.')
+        _tprint(f'Script {sync_script} not found — skipping sync.')
         return
     ret = subprocess.call(['bash', sync_script], cwd=SCRIPT_DIR)
     if ret != 0:
-        _tprint(f'AVERTISSEMENT : sync_{instrument} a retourné le code {ret}.')
+        _tprint(f'WARNING: sync_{instrument} returned exit code {ret}.')
     else:
-        _tprint('Sync terminé.')
+        _tprint('Sync done.')
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +73,10 @@ def run_sync(instrument):
 # ---------------------------------------------------------------------------
 
 def run_slinky():
-    _step_header('ÉTAPE 2/4 — SLINKY (raffinement longueur d\'onde)')
+    _step_header('STEP 2/4 — SLINKY (wavelength solution refinement)')
     import slinky_tools
     slinky_tools.run_slinky()
-    _tprint('Slinky terminé.')
+    _tprint('Slinky done.')
 
 
 # ---------------------------------------------------------------------------
@@ -84,13 +84,13 @@ def run_slinky():
 # ---------------------------------------------------------------------------
 
 def run_residuals():
-    _step_header('ÉTAPE 3/4 — RESIDUALS (cartes de correction empirique)')
+    _step_header('STEP 3/4 — RESIDUALS (empirical per-pixel correction maps)')
     residuals_script = os.path.join(SCRIPT_DIR, 'residuals.py')
     ret = subprocess.call([sys.executable, residuals_script], cwd=SCRIPT_DIR)
     if ret != 0:
-        _tprint(f'AVERTISSEMENT : residuals.py a retourné le code {ret}.')
+        _tprint(f'WARNING: residuals.py returned exit code {ret}.')
     else:
-        _tprint('Residuals terminé.')
+        _tprint('Residuals done.')
 
 
 # ---------------------------------------------------------------------------
@@ -98,15 +98,15 @@ def run_residuals():
 # ---------------------------------------------------------------------------
 
 def run_telluric(objects, instrument, batch_name, template_style, force_recompute):
-    _step_header(f'ÉTAPE 4/4 — CORRECTION TELLURIQUE ({instrument})')
-    _tprint(f'Objets : {objects}')
+    _step_header(f'STEP 4/4 — TELLURIC CORRECTION ({instrument})')
+    _tprint(f'Objects: {objects}')
 
-    # Import ici pour éviter le long chargement si on --list-objects seulement
+    # Import here to avoid slow loading when only --help is requested
     import predict_abso as pa
 
     first = True
     for obj in objects:
-        _tprint(f'--- Traitement de {obj} ---')
+        _tprint(f'--- Processing {obj} ---')
         pa.main(
             batch_name=batch_name,
             instrument=instrument,
@@ -116,7 +116,7 @@ def run_telluric(objects, instrument, batch_name, template_style, force_recomput
         )
         first = False
 
-    _tprint('Correction tellurique terminée.')
+    _tprint('Telluric correction done.')
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ def main():
     default_targets = cfg.get('science_targets', [])
     default_template = cfg.get('template_style', 'model')
 
-    # Lire le nom du batch depuis batch_config.yaml
+    # Read batch name from batch_config.yaml
     batch_cfg_path = os.path.join(SCRIPT_DIR, 'batch_config.yaml')
     default_batch = 'skypca_v5'
     if os.path.exists(batch_cfg_path):
@@ -140,31 +140,31 @@ def main():
                          else batch_yaml.get('batch_name', default_batch))
 
     parser = argparse.ArgumentParser(
-        description='Pipeline complet de correction tellurique (rsync → slinky → residuals → telluric)',
+        description='Full telluric correction pipeline (rsync → slinky → residuals → telluric)',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument('--instrument', default=default_instrument,
                         choices=['NIRPS', 'SPIROU'],
                         help='Instrument')
     parser.add_argument('--object', default=None,
-                        help='Traiter un seul objet (sinon science_targets du YAML)')
+                        help='Process a single object (default: all science_targets from YAML)')
     parser.add_argument('--batch', default=default_batch,
-                        help='Nom du batch (identifiant de sortie)')
+                        help='Batch name (output identifier)')
     parser.add_argument('--template', default=default_template,
                         choices=['model', 'self'],
-                        help='Style de template stellaire')
+                        help='Stellar template style')
 
-    # Contrôle des étapes
-    step_group = parser.add_argument_group('Contrôle des étapes')
-    step_group.add_argument('--skip-sync',      action='store_true', help='Ne pas exécuter le rsync')
-    step_group.add_argument('--skip-slinky',    action='store_true', help='Ne pas exécuter slinky')
-    step_group.add_argument('--skip-residuals', action='store_true', help='Ne pas exécuter residuals')
-    step_group.add_argument('--skip-telluric',  action='store_true', help='Ne pas exécuter la correction tellurique')
+    # Step control
+    step_group = parser.add_argument_group('Step control')
+    step_group.add_argument('--skip-sync',      action='store_true', help='Skip the rsync step')
+    step_group.add_argument('--skip-slinky',    action='store_true', help='Skip the slinky step')
+    step_group.add_argument('--skip-residuals', action='store_true', help='Skip the residuals step')
+    step_group.add_argument('--skip-telluric',  action='store_true', help='Skip the telluric correction step')
     step_group.add_argument('--only-telluric',  action='store_true',
-                            help='Seulement la correction tellurique (implique --skip-sync --skip-slinky --skip-residuals)')
+                            help='Run only the telluric correction step (implies --skip-sync --skip-slinky --skip-residuals)')
 
     parser.add_argument('--recompute', action='store_true',
-                        help='Forcer le recalcul de la grille d\'absorption pré-calculée')
+                        help='Force recomputation of the pre-computed absorption grid')
 
     args = parser.parse_args()
 
@@ -177,25 +177,25 @@ def main():
     objects = [args.object] if args.object else default_targets
 
     if not objects:
-        print('ERREUR : aucun objet spécifié et science_targets vide dans telluric_config.yaml.')
+        print('ERROR: no object specified and science_targets is empty in telluric_config.yaml.')
         sys.exit(1)
 
     t0 = time.time()
-    _tprint(f'Pipeline démarré | instrument={instrument} | objets={objects} | batch={args.batch}')
+    _tprint(f'Pipeline started | instrument={instrument} | objects={objects} | batch={args.batch}')
 
-    # ---- Étape 1 ----
+    # ---- Step 1 ----
     if not args.skip_sync:
         run_sync(instrument)
 
-    # ---- Étape 2 ----
+    # ---- Step 2 ----
     if not args.skip_slinky:
         run_slinky()
 
-    # ---- Étape 3 ----
+    # ---- Step 3 ----
     if not args.skip_residuals:
         run_residuals()
 
-    # ---- Étape 4 ----
+    # ---- Step 4 ----
     if not args.skip_telluric:
         run_telluric(
             objects=objects,
@@ -207,7 +207,7 @@ def main():
 
     elapsed = time.time() - t0
     h, m, s = int(elapsed // 3600), int((elapsed % 3600) // 60), int(elapsed % 60)
-    _step_header(f'PIPELINE TERMINÉ — durée totale {h:02d}:{m:02d}:{s:02d}')
+    _step_header(f'PIPELINE DONE — total elapsed time {h:02d}:{m:02d}:{s:02d}')
 
 
 if __name__ == '__main__':

@@ -1,5 +1,5 @@
 
-# Synchronisation des fichiers FP et HC pour SPIROU
+# Sync calibration and science files for SPIROU
 SRC_BASE="/scratch/eartigau/spirou_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
@@ -15,7 +15,7 @@ echo "  sync_SPIROU"
 echo "  Source calib   : $SRC_CALIB"
 echo "  Source objects : $SRC_OBJECTS"
 echo "  Dest           : $(pwd)"
-echo "  Dossiers cibles:"
+echo "  Destination folders:"
 echo "    calibrations -> $DST_CALIB"
 echo "    science      -> $DST_SCIDATA"
 echo "    hotstars     -> $DST_HOTSTARS"
@@ -23,7 +23,7 @@ echo "    t.fits       -> $DST_ORIG"
 echo "========================================"
 echo ""
 
-# Synchroniser les calibrations
+# Sync calibration files
 echo "[1/3] Calibrations -> $DST_CALIB"
 echo "  Patterns : wave_fplines, wave_hclines, wavesol_ref, waveref_hclines, wave_night"
 rsync -av --progress \
@@ -38,8 +38,8 @@ rsync -av --progress \
 echo "[1/3] Calibrations OK"
 echo ""
 
-# Sync science objects — uniquement les cibles listées dans science_targets du YAML
-echo "[2/3] Chargement de science_targets depuis telluric_config.yaml..."
+# Sync science objects — only targets listed under science_targets in the YAML
+echo "[2/3] Loading science_targets from telluric_config.yaml..."
 SCIENCE_TARGETS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
@@ -47,50 +47,50 @@ print(' '.join(cfg.get('science_targets', [])))
 "))
 
 if [ ${#SCIENCE_TARGETS[@]} -eq 0 ]; then
-    echo "  Attention : aucune cible dans science_targets du YAML, aucun objet scientifique synchronisé."
+    echo "  Warning: no targets in science_targets in the YAML, no science objects will be synced."
 else
-    echo "[2/3] ${#SCIENCE_TARGETS[@]} cible(s) : ${SCIENCE_TARGETS[*]}"
+    echo "[2/3] ${#SCIENCE_TARGETS[@]} target(s): ${SCIENCE_TARGETS[*]}"
     for target in "${SCIENCE_TARGETS[@]}"; do
+        mkdir -p "$DST_SCIDATA/$target"
+        mkdir -p "$DST_ORIG/$target"
         if [ -d "$SRC_OBJECTS/$target" ]; then
             N_E2DS=$(ls "$SRC_OBJECTS/$target/"*_e2dsff_AB.fits 2>/dev/null | wc -l | tr -d ' ')
             N_TFITS=$(ls "$SRC_OBJECTS/$target/"*t.fits 2>/dev/null | wc -l | tr -d ' ')
-            echo "  -> $target  (${N_E2DS} e2dsff, ${N_TFITS} t.fits disponibles à la source)"
-            mkdir -p "$DST_SCIDATA/$target"
-            echo "     Copie e2dsff -> $DST_SCIDATA/$target/"
+            echo "  -> $target  (${N_E2DS} e2dsff, ${N_TFITS} t.fits available at source)"
+            echo "     Copying e2dsff -> $DST_SCIDATA/$target/"
             rsync -av --progress "$SRC_OBJECTS/$target/"*_e2dsff_AB.fits "$DST_SCIDATA/$target/" 2>/dev/null || true
-            mkdir -p "$DST_ORIG/$target"
-            echo "     Copie t.fits -> $DST_ORIG/$target/"
+            echo "     Copying t.fits -> $DST_ORIG/$target/"
             rsync -av --progress "$SRC_OBJECTS/$target/"*t.fits "$DST_ORIG/$target/" 2>/dev/null || true
         else
-            echo "  Avertissement : $target introuvable dans $SRC_OBJECTS"
+            echo "  Warning: $target not found in $SRC_OBJECTS"
         fi
     done
 fi
-echo "[2/3] Objets science OK"
+echo "[2/3] Science objects OK"
 echo ""
 
 # Copy hotstars (flattened - no subdirectories)
-echo "[3/3] Chargement de hot_stars depuis telluric_config.yaml..."
+echo "[3/3] Loading hot_stars from telluric_config.yaml..."
 HOT_STARS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
 "))
 
-echo "[3/3] ${#HOT_STARS[@]} étoile(s) tellurique(s) : ${HOT_STARS[*]}"
+echo "[3/3] ${#HOT_STARS[@]} telluric star(s): ${HOT_STARS[*]}"
 for star in "${HOT_STARS[@]}"; do
     if [ -d "$SRC_OBJECTS/$star" ]; then
         N_E2DS=$(ls "$SRC_OBJECTS/$star/"*_e2dsff_AB.fits 2>/dev/null | wc -l | tr -d ' ')
-        echo "  -> $star  (${N_E2DS} e2dsff disponibles à la source)"
-        echo "     Copie e2dsff -> $DST_HOTSTARS"
+        echo "  -> $star  (${N_E2DS} e2dsff available at source)"
+        echo "     Copying e2dsff -> $DST_HOTSTARS"
         rsync -av --progress "$SRC_OBJECTS/$star/"*_e2dsff_AB.fits "$DST_HOTSTARS" 2>/dev/null || true
     else
-        echo "  Avertissement : $star introuvable dans $SRC_OBJECTS"
+        echo "  Warning: $star not found in $SRC_OBJECTS"
     fi
 done
-echo "[3/3] Étoiles telluriques OK"
+echo "[3/3] Telluric stars OK"
 
 echo ""
 echo "========================================"
-echo "  sync_SPIROU terminé."
-echo "========================================" 
+echo "  sync_SPIROU done."
+echo "========================================"  
