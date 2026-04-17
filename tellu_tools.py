@@ -1621,12 +1621,17 @@ def fetch_template(hdr: fits.Header,
     else:
         raise ValueError(f"Unknown instrument {instrument}")
 
-    # Round to temperature grid
+    # Clamp teff to available grid range, then round to bracketing temperatures
     temp_config = TEMPLATE_CONFIG
-    t_up = int(teff / temp_config['temp_step'] + 1) * temp_config['temp_step']
+    teff_clamped = max(temp_config['temp_min'], min(teff, temp_config['temp_max']))
+    if teff_clamped != teff:
+        tprint(f"Teff={teff:.0f}K out of model grid [{temp_config['temp_min']}, "
+               f"{temp_config['temp_max']}], clamped to {teff_clamped:.0f}K", color='orange')
+
+    t_up = int(teff_clamped / temp_config['temp_step'] + 1) * temp_config['temp_step']
     t_low = t_up - temp_config['temp_step']
 
-    # Enforce limits
+    # Enforce limits (handles edge case where teff == temp_max exactly)
     t_low = max(t_low, temp_config['temp_min'])
     t_up = min(t_up, temp_config['temp_max'])
 
@@ -1638,7 +1643,7 @@ def fetch_template(hdr: fits.Header,
                               f'models/temperature_gradient_{t_up}.fits')
 
     # Interpolation weights
-    weight_up = (teff - t_low) / (t_up - t_low) if t_up != t_low else 0.0
+    weight_up = (teff_clamped - t_low) / (t_up - t_low) if t_up != t_low else 0.0
     weight_low = 1.0 - weight_up
 
     # Read tables
