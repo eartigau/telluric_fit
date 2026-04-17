@@ -9,7 +9,7 @@
 # =============================================================================
 machines:
   FIR:
-    detect_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas_test_fit'
+    detect_path: '/home/eartigau/.fir_token'
     project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas_test_fit'
     doplot: false                # Don't show interactive plots on FIR
     n_cores: 8                   # Number of cores for parallel processing
