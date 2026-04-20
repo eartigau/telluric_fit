@@ -1,7 +1,14 @@
 
 # Sync calibration and science files for NIRPS
-# Use the python from the active environment, not the system python3
-PYTHON=$(which python)
+# Use the python from the venv directly — avoids shell environment issues
+PYTHON="$HOME/Venv/tellu_env/bin/python"
+if [ ! -f "$PYTHON" ]; then
+    PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
+fi
+if [ -z "$PYTHON" ]; then
+    echo "ERROR: no python found"
+    exit 1
+fi
 SRC_BASE="/scratch/eartigau/nirps_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
