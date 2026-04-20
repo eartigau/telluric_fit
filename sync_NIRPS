@@ -1,5 +1,7 @@
 
 # Sync calibration and science files for NIRPS
+# Use the python from the active environment, not the system python3
+PYTHON=$(which python)
 SRC_BASE="/scratch/eartigau/nirps_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
@@ -14,7 +16,7 @@ if [ ! -f "$BATCH_CONFIG" ]; then
     exit 1
 fi
 
-PROJECT_PATH=$(python3 -c "
+PROJECT_PATH=$($PYTHON -c "
 import yaml, os, sys
 cfg_path = '$BATCH_CONFIG'
 with open(cfg_path) as f:
@@ -79,7 +81,7 @@ echo ""
 # Sync science objects — only targets listed under science_targets in the YAML
 echo ""
 echo "[2/3] Loading science_targets from telluric_config.yaml..."
-SCIENCE_TARGETS=($(python3 -c "
+SCIENCE_TARGETS=($($PYTHON -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 print(' '.join(cfg.get('science_targets', [])))
@@ -113,7 +115,7 @@ echo ""
 # Copy hotstars (flattened - no subdirectories)
 echo ""
 echo "[3/3] Loading hot_stars from telluric_config.yaml..."
-HOT_STARS=($(python3 -c "
+HOT_STARS=($($PYTHON -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
