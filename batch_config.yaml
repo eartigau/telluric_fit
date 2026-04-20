@@ -13,6 +13,9 @@ machines:
     project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit'
     doplot: false                # Don't show interactive plots on FIR
     n_cores: 8                   # Number of cores for parallel processing
+    # Environment setup for Compute Canada clusters
+    library_path: '/cvmfs/soft.computecanada.ca/gentoo/2023/x86-64-v3/usr/lib64'
+    conda_env: 'tellu_env'
   
   MacBook-eartigau:
     detect_path: '/Volumes/irrisor/test_fit'

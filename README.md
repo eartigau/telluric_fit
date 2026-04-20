@@ -36,6 +36,34 @@ python run_pipeline.py --instrument SPIROU
 
 ---
 
+## ⚠️ Troubleshooting
+
+### NumPy Import Error on Compute Canada Clusters
+
+If you encounter a `libcpupower.so.0: cannot open shared object file` error when importing numpy:
+
+1. **Quick fix**: Set the library path before running Python:
+   ```bash
+   export LD_LIBRARY_PATH="/cvmfs/soft.computecanada.ca/gentoo/2023/x86-64-v3/usr/lib64:$LD_LIBRARY_PATH"
+   ```
+
+2. **Permanent fix**: Use the provided setup script:
+   ```bash
+   chmod +x setup_env.sh
+   source setup_env.sh
+   ```
+
+3. **Alternative**: Reinstall numpy from conda-forge:
+   ```bash
+   conda uninstall numpy && conda install -c conda-forge numpy
+   ```
+
+### Environment Configuration
+
+The pipeline automatically detects which machine you're running on based on file paths defined in `batch_config.yaml`. Make sure the appropriate `detect_path` exists for your machine.
+
+---
+
 ## Overview
 
 The pipeline has six main stages:

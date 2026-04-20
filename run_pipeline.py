@@ -13,6 +13,7 @@ Usage
     python run_pipeline.py --skip-sync       # skip rsync
     python run_pipeline.py --skip-slinky     # skip slinky
     python run_pipeline.py --skip-residuals  # skip residuals
+    python run_pipeline.py --only-slinky     # run only the slinky step
     python run_pipeline.py --only-telluric   # run only the telluric correction step
     python run_pipeline.py --object PROXIMA  # process a single object (default: science_targets from YAML)
     python run_pipeline.py --instrument SPIROU
@@ -160,6 +161,8 @@ def main():
     step_group.add_argument('--skip-slinky',    action='store_true', help='Skip the slinky step')
     step_group.add_argument('--skip-residuals', action='store_true', help='Skip the residuals step')
     step_group.add_argument('--skip-telluric',  action='store_true', help='Skip the telluric correction step')
+    step_group.add_argument('--only-slinky',    action='store_true',
+                            help='Run only the slinky step (implies --skip-sync --skip-residuals --skip-telluric)')
     step_group.add_argument('--only-telluric',  action='store_true',
                             help='Run only the telluric correction step (implies --skip-sync --skip-slinky --skip-residuals)')
 
@@ -167,6 +170,11 @@ def main():
                         help='Force recomputation of the pre-computed absorption grid')
 
     args = parser.parse_args()
+
+    if args.only_slinky:
+        args.skip_sync = True
+        args.skip_residuals = True
+        args.skip_telluric = True
 
     if args.only_telluric:
         args.skip_sync = True
