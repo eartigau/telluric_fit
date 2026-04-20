@@ -88,6 +88,13 @@ science_targets:
   - GJ3618
   - GL406
   - LP_783M2
+  - TOI3494
+  - WASP193 
+  - BPS_CS_22881M0003
+  - TIC151584725
+  - TIC427346731
+  - SMETHELLS_20
+  
 
 
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)
