@@ -277,10 +277,15 @@ def _process_single_order(args):
 # All plotting is controlled via the global "doplot" flag.
 # -----------------------------------------------------------------------------
 
-# Suppress RuntimeWarnings for NaN operations (expected with masked data)
+# Coding errors (deprecated APIs, future incompatibilities) should crash immediately
+# rather than silently producing NaN-filled outputs.
+warnings.filterwarnings('error', category=DeprecationWarning)
+warnings.filterwarnings('error', category=FutureWarning)
+# Suppress only the specific expected NaN-related runtime warnings
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*All-NaN.*')
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Mean of empty slice.*')
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero.*')
 
 doplot = False  # Set to True to enable all diagnostic plots
 
@@ -413,11 +418,22 @@ if __name__ == '__main__':
 
     # Mean absorber across molecules (product along the first axis)
     # Used for masking out near-transparent regions (low absorption)
-    mean_abso = np.product(all_abso, axis=0)
+    mean_abso = np.prod(all_abso, axis=0)
+
+    # Sanity check: mean_abso must have finite values, otherwise all output maps
+    # will be filled with NaN/zeros silently (e.g. if construct_abso returned all-NaN).
+    if not np.any(np.isfinite(mean_abso)):
+        raise ValueError('mean_abso is entirely NaN/Inf — construct_abso returned bad data. '
+                         'Check that the TAPAS absorption cube is loaded correctly.')
 
     # Mask out pixels with little/no absorption to reduce noise amplification
     nanmask = np.ones(mean_abso.shape, dtype=float)
     nanmask[mean_abso < 0.3] = np.nan
+
+    # Sanity check: at least some pixels must be unmasked (absorption > 0.3)
+    if not np.any(np.isfinite(nanmask)):
+        raise ValueError('nanmask is entirely NaN — no pixels have mean absorption > 0.3. '
+                         'Check the absorption threshold and the TAPAS data.')
 
 
     # Output maps (per order, per pixel): slope and intercept for residual trends
@@ -473,11 +489,14 @@ if __name__ == '__main__':
     elapsed = time.time() - t0
     print(f'  Finished loading in {elapsed:.1f}s ({len(files)/elapsed:.1f} files/s)')
 
-    print('Populating data cube...')
-    for i, (trans, header_vals) in enumerate(results):
+    print(f'Populating data cube ({len(results)} files)...')
+    t0_cube = time.time()
+    for i, (trans, header_vals) in enumerate(tqdm(results, desc='Populating cube', unit='files',
+                                                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
         big_cube[:, :, i] = trans
         for key in keys:
             tbl0[key][i] = header_vals[key]
+    print(f'  Cube populated in {time.time() - t0_cube:.1f}s')
 
     # Attempt to cast columns to numeric or boolean where applicable
     for key in keys:

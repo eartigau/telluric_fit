@@ -32,8 +32,15 @@ import sys
 import time
 from multiprocessing import Pool
 
-# Suppress numpy and astropy warnings for cleaner output
-warnings.filterwarnings('ignore', category=RuntimeWarning)
+# Coding errors (deprecated APIs, future incompatibilities) should crash immediately
+# rather than silently producing NaN-filled outputs.
+warnings.filterwarnings('error', category=DeprecationWarning)
+warnings.filterwarnings('error', category=FutureWarning)
+# Suppress only the specific expected FITS/NaN runtime warnings
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*All-NaN.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Mean of empty slice.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*Card is too long.*')
 warnings.filterwarnings('ignore', message='.*VerifyWarning.*')
 
@@ -260,7 +267,8 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
 
         # Save log transmission
         with warnings.catch_warnings():
-            warnings.simplefilter('ignore')
+            # log(0) and log(NaN) are expected for masked telluric pixels
+            warnings.simplefilter('ignore', RuntimeWarning)
             log_trans = np.log(trans_waveref)
 
         # Mask invalid pixels where telluric correction is unreliable

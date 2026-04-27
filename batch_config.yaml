@@ -18,8 +18,8 @@ machines:
     conda_env: 'tellu_env'
   
   MacBook-eartigau:
-    detect_path: '/Volumes/irrisor/test_fit'
-    project_path: '/Volumes/irrisor/test_fit'
+    detect_path: '/Users/eartigau/telluric_fit'
+    project_path: '/Users/eartigau/telluric_fit'
     doplot: true                 # Show interactive plots on MacBook
     n_cores: 1                   # Serial processing on MacBook (use 1 for no parallelization)
 

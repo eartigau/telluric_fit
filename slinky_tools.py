@@ -7,6 +7,43 @@ Scientific data (FP/HC line lists, wave solutions) are discovered from
 calib_INSTRUMENT/ directories that must be synced beforehand (see sync_NIRPS,
 sync_SPIROU).
 
+----------------------------------------------------------------------------
+Scientific principle
+----------------------------------------------------------------------------
+A cross-dispersed echelle spectrograph like NIRPS or SPIRou has TWO
+independent wavelength references:
+
+    * Hollow-Cathode (HC) lamps: a *sparse* set of atomic emission lines whose
+      laboratory wavelengths are tabulated to high accuracy.  These provide
+      absolute wavelength anchors but are too few to constrain a full
+      pixel-to-wavelength map.
+
+    * Fabry-Perot (FP) etalon: a *dense* comb of evenly spaced peaks whose
+      *spacing* is extremely stable but whose *absolute* wavelength scale
+      drifts (the cavity length L breathes with temperature/pressure).  The
+      wavelength of FP peak number n is
+
+          lambda_n = 2 * L(lambda) / n                                   (*)
+
+      where L(lambda) is the wavelength-dependent effective cavity length,
+      modelled here as a Chebyshev polynomial.
+
+The slinky method refines the wavelength solution by:
+  1. Anchoring FP peak numbers using HC absolute wavelengths and Eq. (*),
+     producing a per-line cavity-length estimate for every HC epoch.
+  2. Stacking many epochs to build a stable median cavity reference and a
+     per-line uncertainty.
+  3. For each epoch, fitting a global zero-point + slope (m/s + m/s/um) of
+     the cavity drift relative to the reference -- these capture
+     instrument-wide drifts that the per-night FP solution alone cannot.
+  4. Applying that correction to every FP wavelength solution and writing
+     `*_wavesol_ref_*_slinky.fits` files; science e2dsff frames are then
+     re-pointed at the slinky-patched wavesol via `padding_wavesol`.
+
+The end product is a sub-m/s consistent wavelength solution across the entire
+set of nights synced into `calib_INSTRUMENT/`.
+----------------------------------------------------------------------------
+
 Author: Etienne Artigau (original slinky code)
 Adaptation: 2026-04
 """
@@ -110,13 +147,35 @@ def _get_slinky_params(config):
 # ============================================================================
 
 def val_cheby(coeffs, xvector, domain):
-    """Evaluate a Chebyshev polynomial on *xvector* mapped to *domain*."""
+    """Evaluate a Chebyshev polynomial on *xvector* mapped to *domain*.
+
+    Chebyshev polynomials are defined on [-1, 1]; we linearly remap the
+    physical wavelength range [domain[0], domain[1]] onto that canonical
+    interval before evaluating.  Used to evaluate the cavity-length
+    polynomial L(lambda) shipped in the WCAV0* header keys.
+    """
     domain_cheby = 2 * (xvector - domain[0]) / (domain[1] - domain[0]) - 1
     return np.polynomial.chebyshev.chebval(domain_cheby, coeffs)
 
 
 def gp_project(x, y, yerr, wslinky=1e-1, xmin=980, xmax=1850, npts=100000):
-    """Project scattered data onto a regular grid with a Gaussian kernel."""
+    """Project scattered data onto a regular grid with a Gaussian kernel.
+
+    This is a lightweight, non-parametric Gaussian-process-like smoother:
+    each input point (x_i, y_i, yerr_i) contributes a Gaussian bump of width
+    `wslinky` (in nm) centred on x_i, weighted by 1/yerr_i^2.  The result is
+    the inverse-variance-weighted mean of all bumps evaluated on a regular
+    grid xv of length `npts` between xmin and xmax.
+
+    Why this and not a true GP?  The dataset (FP residuals across an entire
+    spectrograph) has ~1e5 points; full GP regression would be O(N^3).  A
+    fixed-width Gaussian kernel with hard truncation at |dx|/wslinky < 10
+    gives equivalent smoothing in O(N) per output sample.
+
+    The output (xv, yv) is consumed downstream via a spline (`ius`) to
+    correct the wavelength map for residual order-by-order systematics that
+    survive the global zero-point + slope fit.
+    """
     tprint(f'    GP projection: {len(x)} points sur {npts} pixels (wslinky={wslinky} nm)...', color='green')
     xv = np.linspace(xmin, xmax, npts)
     weights = np.full(npts, 1e-12)
@@ -136,7 +195,21 @@ def gp_project(x, y, yerr, wslinky=1e-1, xmin=980, xmax=1850, npts=100000):
 
 
 def odd_ratio_mean(value, err, odd_ratio=1e-4, nmax=10):
-    """Iterative weighted mean with outlier rejection (odd-ratio method)."""
+    """Iterative weighted mean with outlier rejection (odd-ratio method).
+
+    Standard inverse-variance means break catastrophically in the presence of
+    a few outliers.  The *odd-ratio* method (Artigau et al. 2022, LBL paper)
+    treats each measurement as a mixture of a Gaussian inlier model and a
+    flat outlier prior with prior ratio `odd_ratio`.  The posterior
+    probability of being an inlier is
+
+        P(good | x) = exp(-0.5 * nsig^2) / (exp(-0.5 * nsig^2) + odd_ratio)
+
+    which we use as the weight on each point.  Iterating to convergence
+    yields a robust mean that is statistically optimal for Gaussian inliers
+    and gracefully down-weights outliers without a hard sigma-clip threshold.
+    `nmax=10` iterations is empirically sufficient for convergence.
+    """
     keep = np.isfinite(value) * np.isfinite(err)
     if np.sum(keep) == 0:
         return np.nan, np.nan
@@ -155,18 +228,28 @@ def odd_ratio_mean(value, err, odd_ratio=1e-4, nmax=10):
 
 
 def odd_ratio_linfit(x, y, yerr):
-    """Iterative weighted linear fit with outlier rejection."""
+    """Iterative weighted linear fit with outlier rejection.
+
+    Same Bayesian inlier/outlier mixture idea as `odd_ratio_mean` but applied
+    to a degree-1 polyfit.  Returned `fit` is [slope, intercept]; `errfit`
+    are the 1-sigma uncertainties from the diagonal of the covariance.
+    """
+    # drop NaNs in any column up-front so polyfit doesn't choke
     g = np.isfinite(y + yerr + x)
     x, y, yerr = x[g], y[g], yerr[g]
     w = np.ones(len(x))
     wsum = 1.0
     wsum0 = 0.0
+    # iterate until the total weight stabilises (outlier weights have settled)
     while np.abs(wsum0 - wsum) > 1e-6:
         wsum0 = np.sum(w)
+        # weighted linear fit; np.polyfit's `w` multiplies 1/sigma, hence w/yerr
         fit, sig = np.polyfit(x, y, 1, w=w / yerr, cov=True)
         errfit = np.sqrt(np.diag(sig))
+        # normalised residuals -> Gaussian inlier likelihood
         res = (y - np.polyval(fit, x)) / yerr
         p1 = np.exp(-0.5 * res ** 2)
+        # posterior weight: p1 / (p1 + p_outlier), with p_outlier = 1e-6
         w = p1 / (p1 + 1e-6)
         wsum = np.sum(w)
     return fit, errfit
@@ -263,7 +346,10 @@ def refine_wavesol(params):
 
     tprint(f'[SLINKY] {len(files_fp)} FP and {len(files_hc)} HC files found', color='green')
 
-    # Keep only FP files that have a matching HC within 0.1 day
+    # Keep only FP files that have a matching HC within 0.1 day.
+    # FP and HC are taken in interleaved sequences; if the gap is much larger
+    # than ~2 hours the cavity may have drifted (thermal cycle of the cryostat)
+    # so the pairing becomes meaningless.
     dt = np.array([np.min(np.abs(m - mjds_hc)) for m in mjds_fp])
     g = dt < 0.1
     files_fp = files_fp[g]
@@ -274,8 +360,17 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 1 – Compute cavity for each HC epoch
     # ------------------------------------------------------------------
+    # For each HC frame we measure the FP peak number that falls at the
+    # *measured* pixel position of every HC line.  Combined with the HC line's
+    # known laboratory wavelength, this gives a direct estimate of the FP
+    # cavity length at that wavelength via Eq. (*):
+    #     CAVITY = WAVE_REF * PEAK_NUMBER  (proportional to L(lambda))
+    # The interpolation `spl(pixel_meas)` converts the measured HC pixel into
+    # a fractional FP peak number using the FP line list of the *same* night.
+    # Output: each HC frame gets a `_slinky.fits` copy with a CAVITY column.
     tprint(f'[SLINKY] Étape 1/4 : calcul de la cavité pour {len(files_hc)} époques HC...', color='cyan')
     for i_hc in range(len(files_hc)):
+        # output written next to the input -> idempotent re-runs
         file_hc_updated = files_hc[i_hc].replace('.fits', '_slinky.fits')
         if os.path.isfile(file_hc_updated):
             tprint(f'  HC {i_hc+1}/{len(files_hc)} already processed, skipping', color='yellow')
@@ -284,22 +379,29 @@ def refine_wavesol(params):
         tprint(f'  Processing HC {i_hc+1}/{len(files_hc)}', color='green')
         tbl_hc = Table.read(files_hc[i_hc], 'WAVE_HCLIST')
 
+        # Re-order the per-night HC list so that row i corresponds to the
+        # *same* (ORDER, WAVE_REF) line as row i of the reference list.
+        # Different nights may have detected a different subset of HC lines;
+        # we want a fixed alignment so that all-epoch stacks (Step 2) work.
         tbl_hc_tmp = Table(tbl_hc_ref)
         ii = np.zeros(len(tbl_hc_tmp), dtype=int)
         for iline in tqdm(range(len(tbl_hc_tmp)), leave=False):
             g = ((tbl_hc_tmp['ORDER'][iline] == tbl_hc['ORDER']) *
                  (tbl_hc_tmp['WAVE_REF'][iline] == tbl_hc['WAVE_REF']))
             if np.sum(g) == 0:
+                # line missing in this night -> ii stays 0; row will be masked
                 continue
             ii[iline] = np.where(g)[0][0]
 
         tbl_hc = Table(tbl_hc[ii])
 
+        # second-level idempotency guard (legacy files may already have CAVITY)
         if 'CAVITY' in tbl_hc.colnames:
             tprint(f'  Cavity already in table, skipping', color='yellow')
             continue
 
-        # Find matching FP
+        # Find matching FP within half a day (already pre-filtered to 0.1 d
+        # above for `files_fp`, but `files_hc` is the full list so we re-check).
         i_fp = np.argmin(np.abs(mjds_fp - mjds_hc[i_hc]))
         if np.abs(mjds_fp[i_fp] - mjds_hc[i_hc]) > 0.5:
             tprint(f'  No matching FP for HC {i_hc+1}, skipping', color='red')
@@ -307,6 +409,7 @@ def refine_wavesol(params):
 
         tbl_fp = Table.read(files_fp[i_fp], 'WAVE_FPLIST')
 
+        # pre-allocate output columns
         tbl_hc['CAVITY'] = np.nan
         mask = tbl_hc['PIXEL_MEAS'].mask
         all_frac_peak = np.zeros_like(tbl_hc['PIXEL_MEAS'])
@@ -315,18 +418,26 @@ def refine_wavesol(params):
         pixel_meas = np.array(tbl_hc['PIXEL_MEAS'])
         current_order = -1
 
+        # Walk the HC line list; lines are roughly sorted by order so the
+        # `if order != current_order` cache rebuild only fires ~N_orders times.
         for i in tqdm(range(len(tbl_hc)), leave=False):
             if mask[i]:
                 continue
             order = tbl_hc['ORDER'][i]
             if order != current_order:
+                # rebuild a pixel -> FP peak-number spline for this echelle order
                 tbl_fp_order = tbl_fp[tbl_fp['ORDER'] == order]
                 tbl_fp_order = tbl_fp_order[~tbl_fp_order['PIXEL_MEAS'].mask]
                 current_order = order
+                # k=1 (linear) + ext=1 (return 0 outside the FP coverage) gives
+                # a graceful failure mode for HC lines near the order edges
                 spl = ius(tbl_fp_order['PIXEL_MEAS'], tbl_fp_order['PEAK_NUMBER'], k=1, ext=1)
+            # fractional FP peak number at the measured HC pixel
             all_frac_peak[i] = spl(pixel_meas[i])
+            # cavity = lambda_lab * peak_number (proportional to 2*L(lambda))
             all_cavity[i] = wave_ref[i] * all_frac_peak[i]
 
+        # `ext=1` returned 0 for HC lines outside the FP-defined region; flag NaN
         bad = all_frac_peak == 0
         all_frac_peak[bad] = np.nan
         all_cavity[bad] = np.nan
@@ -334,12 +445,18 @@ def refine_wavesol(params):
         tbl_hc['PEAK_NUMBER'] = all_frac_peak
         tbl_hc['CAVITY'] = all_cavity
 
+        # Convert masked entries to NaN so the FITS table is mask-free; this
+        # avoids astropy serialising masks as a separate extension that
+        # downstream tooling does not understand.
         for col in tbl_hc.colnames:
             try:
                 tbl_hc[col][tbl_hc[col].mask] = np.nan
             except Exception:
+                # column has no .mask (already plain ndarray) -> nothing to do
                 pass
 
+        # Write the augmented table back; copy-then-edit preserves all the
+        # primary-header provenance keys from the original DRS output.
         copyfile(files_hc[i_hc], file_hc_updated)
         with fits.open(file_hc_updated) as hdul:
             hdul[1].data = tbl_hc.as_array()
@@ -348,53 +465,90 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 2 – Build cavity statistics across epochs
     # ------------------------------------------------------------------
+    # Stack CAVITY measurements from all HC epochs into a [n_epoch, n_line]
+    # matrix.  We then:
+    #   (a) subtract a per-epoch median to remove the night-to-night global
+    #       cavity drift (which we will recover separately in Step 3),
+    #   (b) compute a per-line median across epochs -- the *cavity reference*
+    #       used to convert raw cavity into a velocity offset dv = c*(d/ref-1),
+    #   (c) compute a per-line robust sigma (16-84 percentile half-width)
+    #       which becomes the per-line uncertainty `sig_per_line_ms` (m/s)
+    #       reused in Step 3 weighting and Step 4 sanity checks.
+    # Lines with finite measurements in fewer than 20 % of epochs are masked.
     tprint(f'[SLINKY] Étape 2/4 : statistiques de cavité sur {len(files_hc)} époques...', color='cyan')
     tbl_hc_ref = Table.read(ref_file_hc)
     href = fits.getheader(ref_file_hc)
+    # `WCAV0*` holds the Chebyshev coefficients of the master cavity model
+    # L(lambda) shipped with the DRS reference; `WCAV_PED` is its DC offset.
     cavity_polynomial = np.array([href[key] for key in href['WCAV0*'].keys()])
     WCAV_PED = href['WCAV_PED']
 
+    # sort epochs in time so plots are chronological
     order = np.argsort(mjds_hc)
     mjds_hc = mjds_hc[order]
     files_hc = files_hc[order]
 
+    # all_cavity[i_epoch, i_line] = cavity estimate for one HC line at one night
     all_cavity = np.zeros([len(files_hc), len(tbl_hc_ref)], dtype=float)
     for ifile, file in tqdm(enumerate(files_hc), leave=False):
         file_hc_updated = file.replace('.fits', '_slinky.fits')
         all_cavity[ifile] = Table.read(file_hc_updated, 'WAVE_HCLIST')['CAVITY'].data.data
 
+    # zeros come from masked / out-of-range HC lines (Step 1)
     all_cavity[all_cavity == 0] = np.nan
+    # provisional per-line median used as the offset reference for de-meaning
     med_per_line = np.nanmedian(all_cavity, axis=0)
 
+    # Remove a per-epoch global offset (the wholesale cavity drift between
+    # nights).  Without this, the per-line sigma below would be dominated by
+    # the night-to-night drift rather than line-by-line scatter.
     meds = np.zeros(len(files_hc))
     for iepoch in range(len(files_hc)):
         meds[iepoch] = np.nanmedian(all_cavity[iepoch] - med_per_line)
         all_cavity[iepoch] -= meds[iepoch]
 
+    # diagnostic: cavity drift versus time (should be smooth ~thermal cycle)
     plt.plot(mjds_hc, meds, '.')
     plt.savefig(f'{plot_folder}/cavity_median_{instrument}.pdf')
     plt.close()
 
+    # recompute per-line median *after* removing per-epoch drift
     med_per_line = np.nanmedian(all_cavity, axis=0)
 
+    # Compare our empirical per-line cavity to the master Chebyshev model and
+    # update the WAVE_REF column accordingly (small velocity correction).
     domain = [inst_wavestart, inst_waveend]
     cavity_ref = val_cheby(cavity_polynomial, tbl_hc_ref['WAVE_REF'], domain=domain) + WCAV_PED
     dv_ref = c * (med_per_line / cavity_ref - 1)
+    # |dv| > 1 km/s is non-physical for an HC line -> reject (likely line blend)
     bad = np.abs(dv_ref) > 1000
     dv_ref[bad] = np.nan
     tbl_hc_ref['WAVE_REF'] = tbl_hc_ref['WAVE_REF'] * (1 - dv_ref / c)
     med_per_line[bad] = np.nan
 
+    # Per-line sigma from the 16-84 percentile (robust against outliers).
     n1, p1 = np.nanpercentile(all_cavity, [16, 84], axis=0)
     sig_per_line = (p1 - n1) / 2
+    # require at least 20 % of epochs with a finite measurement, else mask
     bad = np.sum(np.isfinite(all_cavity), axis=0) < all_cavity.shape[0] // 5
     sig_per_line[sig_per_line == 0] = np.nan
     sig_per_line[bad] = np.nan
+    # convert to a velocity uncertainty (m/s) for downstream weighting
     sig_per_line_ms = c * (sig_per_line / med_per_line)
 
     # ------------------------------------------------------------------
     # Step 3 – Measure zero-point & slope per HC epoch
     # ------------------------------------------------------------------
+    # For every HC epoch, the deviation of its CAVITY from the reference
+    # (in m/s) is fit as a linear function of wavelength:
+    #     dv(lambda) = pedestal + slope * (lambda - wave_leverage) / 1um
+    # The pivot at `wave_leverage` (typically 1600 nm) decorrelates the
+    # pedestal and slope (their covariance ~ 0 there for an even wavelength
+    # span).  These two numbers describe the dominant non-FP wavelength
+    # systematic per night:
+    #   * pedestal -> instrumental zero-point drift (m/s)
+    #   * slope    -> chromatic stretch (m/s/um), e.g. dispersion changes.
+    # Both are stored to apply in Step 4 to the matching FP wavesols.
     tprint(f'[SLINKY] Étape 3/4 : mesure du zéro-point et pente pour {len(files_hc)} époques HC...', color='cyan')
     all_slopes = np.zeros(len(files_hc), dtype=float)
     all_errslopes = np.zeros_like(all_slopes)
@@ -410,12 +564,21 @@ def refine_wavesol(params):
         tbl2 = Table.read(file_hc_updated, 'WAVE_HCLIST')
         h = fits.getheader(file_hc_updated)
 
+        # dcavity[i] = velocity offset (m/s) of line i in this night
+        # vs the all-epochs reference cavity
         dcavity = c * (tbl2['CAVITY'].data.data / med_per_line - 1)
         sdcavity = c * sig_per_line / med_per_line
+        # wave coordinate centered on `wave_leverage` (in micrometres) so the
+        # slope is in m/s/um and decorrelated from the pedestal at the pivot
         wave2 = tbl2['WAVE_REF'] / 1e3 - wave_leverage / 1e3
 
+        # Two-stage fit: first a robust mean to set the zero-point, then a
+        # robust linear fit on the de-meaned residuals.  Doing both in one
+        # polyfit is mathematically equivalent but less stable when a handful
+        # of catastrophic outliers dominate the simple least-squares estimator.
         moy, err = odd_ratio_mean(dcavity, sdcavity)
         fit, sig_fit = odd_ratio_linfit(wave2, dcavity - moy, sdcavity)
+        # restore the pedestal offset removed before linfit
         fit[1] += moy
 
         tprint(f'  HC {ifile+1}/{len(files_hc)} zp {fit[1]:5.2f}+-{sig_fit[1]:5.2f} m/s, '
@@ -447,6 +610,21 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Step 4 – Patch each FP wavelength solution
     # ------------------------------------------------------------------
+    # Each FP wavesol is patched in three stages:
+    #   (i)  Apply the (pedestal, slope) of the nearest HC epoch to the FP
+    #        peak wavelengths via Eq. (*): wave = cavity / peak_number
+    #        with cavity now corrected by the velocity offset.
+    #   (ii) Per-order, fit a degree-5 polynomial pixel -> wavelength to
+    #        get a smooth wavemap on all 4088 pixels of the detector.
+    #   (iii) Project the residual scatter (in m/s) onto a fine wavelength
+    #         grid using the GP kernel smoother and apply the resulting
+    #         spline correction to the wavemap.  This catches structure
+    #         beyond the simple linear (pedestal+slope) trend.
+    # Finally we sanity-check by back-projecting the HC lines through the
+    # patched wavemap and reporting RMS residuals (HC and FP) plus the
+    # leftover slope/pedestal which should now be consistent with zero.
+    # Output: <wavefile>_slinky.fits in patched_dir, with provenance keys
+    # SLINKY, ZPCAV, ZPCAVER, SLPCAV, SLPCAVER in the primary header.
     tprint(f'[SLINKY] Étape 4/4 : correction de {len(files_fp)} solutions FP...', color='cyan')
     recovered_pedestal = np.zeros(len(files_fp), dtype=float)
     recovered_slope = np.zeros_like(recovered_pedestal)
@@ -457,6 +635,8 @@ def refine_wavesol(params):
         tprint(f'  Patching FP wavesol {i_fp+1}/{len(files_fp)}', color='green')
         file_fp = files_fp[i_fp]
         hdr = fits.getheader(file_fp)
+        # The FP file points (via WAVEFILE header) to the wavesol it was
+        # derived from; that is the one we copy and patch in-place.
         wavefile = os.path.join(calib_dir, hdr['WAVEFILE'])
         slinky_name = hdr['WAVEFILE'].replace('.fits', '_slinky.fits')
         patched_wavefile = os.path.join(patched_dir, slinky_name)
@@ -464,12 +644,16 @@ def refine_wavesol(params):
         hdr_fp = fits.getheader(file_fp)
         tbl_fp = Table.read(file_fp, 'WAVE_FPLIST')
 
+        # Pick the HC epoch closest in time and reuse its (pedestal, slope).
+        # FP and HC are taken minutes apart in the calibration sequence so
+        # this is essentially exact.
         i_hc = np.argmin(np.abs(mjds_hc - hdr_fp['MJDMID']))
         slope_hc = all_slopes[i_hc]
         err_slope_hc = all_errslopes[i_hc]
         pedestal_hc = all_pedestals[i_hc]
         err_pedestal_hc = all_errpedestals[i_hc]
 
+        # mtime-based caching: regenerate only if source wavesol is newer
         if os.path.isfile(patched_wavefile):
             if os.path.getmtime(patched_wavefile) >= os.path.getmtime(wavefile):
                 tprint(f'    Already patched and up-to-date, skipping', color='yellow')
@@ -478,15 +662,22 @@ def refine_wavesol(params):
                 tprint(f'    Source wavesol newer than slinky file, regenerating', color='yellow')
                 os.remove(patched_wavefile)
 
-        # Apply cavity correction
+        # ---- Apply cavity correction (stage i of Step 4) ----
         wavelength_model = np.array(tbl_fp['WAVE_REF'].data)
+        # velocity correction (m/s) at every FP peak's wavelength
         doppler_shift = (wavelength_model / 1e3 - wave_leverage / 1e3) * slope_hc + pedestal_hc
+        # evaluate the master cavity model L(lambda) at the FP peak wavelengths
         cavity = val_cheby(cavity_polynomial, wavelength_model,
                            domain=[inst_wavestart, inst_waveend]) + WCAV_PED
         peak_number = tbl_fp['PEAK_NUMBER'].data
+        # Eq. (*) inverted: wavelength = cavity / peak_number, scaled by
+        # (1 + dv/c) to bake in the (pedestal, slope) drift
         wavelength_model = cavity / peak_number * (1 + doppler_shift / c)
         tbl_fp['WAVE_REF'] = wavelength_model
 
+        # ---- Per-order polynomial wavemap (stage ii of Step 4) ----
+        # Start from the reference wavemap shape and overwrite each order in
+        # turn with our own degree-5 polynomial pixel -> wavelength fit.
         wavemap = np.array(ref_wave_sol)
         dv_residuals = []
         dv_residuals_err = []
@@ -500,13 +691,19 @@ def refine_wavesol(params):
             valid = np.isfinite(pixel_meas + wave_ref)
             pixel_meas, wave_ref = pixel_meas[valid], wave_ref[valid]
 
+            # degree 5 captures the smooth dispersion variation per order;
+            # higher degrees overfit, lower degrees leave structure behind
             fit = np.polyfit(pixel_meas, wave_ref, 5)
+            # residual of the FP peaks vs the smooth fit, in m/s
             residual = (wave_ref / np.polyval(fit, pixel_meas) - 1) * c
+            # evaluate on every detector pixel (NIRPS/SPIRou are 4088 wide)
             wave_order = np.polyval(fit, np.arange(4088))
 
             if np.all(np.isfinite(wave_order)):
                 wavemap[order] = wave_order
 
+            # uncertainty estimate from neighbour-pair scatter, divided by
+            # sqrt(2) because we differenced two values of the same RMS
             err = sigma(residual - np.roll(residual, 1)) / np.sqrt(2)
             dv_residuals.append(residual)
             dv_residuals_err.append(np.ones_like(residual) * err)
@@ -516,12 +713,18 @@ def refine_wavesol(params):
         dv_residuals_err = np.concatenate(dv_residuals_err)
         wave_ref_residuals = np.concatenate(wave_ref_residuals)
 
+        # ---- Residual GP correction (stage iii of Step 4) ----
+        # Sample the GP grid at 5x the kernel width so the spline that follows
+        # never undersamples the smoothing kernel.
         npts = int((np.nanmax(wavemap) - np.nanmin(wavemap)) / wslinky * 5)
         xmin, xmax = np.nanmin(wavemap), np.nanmax(wavemap)
 
+        # smooth the per-order residuals onto a regular wavelength grid
         xv, yv = gp_project(wave_ref_residuals, dv_residuals, dv_residuals_err,
                              wslinky=wslinky, xmin=xmin, xmax=xmax, npts=npts)
+        # interpolate the smoothed correction to every pixel of the wavemap
         spl = ius(xv, yv, k=2)
+        # apply the velocity correction multiplicatively (small dv/c regime)
         wavemap = wavemap * (1 + spl(wavemap) / c)
 
         # Sanity check: back-project HC lines

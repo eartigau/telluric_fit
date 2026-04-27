@@ -42,8 +42,15 @@ import sys
 from multiprocessing import Pool
 from functools import partial
 
-# Suppress FITS warnings for cleaner output
-warnings.filterwarnings('ignore', category=RuntimeWarning)
+# Coding errors (deprecated APIs, future incompatibilities) should crash immediately
+# rather than silently producing NaN-filled outputs.
+warnings.filterwarnings('error', category=DeprecationWarning)
+warnings.filterwarnings('error', category=FutureWarning)
+# Suppress only the specific expected FITS/NaN runtime warnings
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*All-NaN.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Mean of empty slice.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*Card is too long.*')
 warnings.filterwarnings('ignore', message='.*VerifyWarning.*')
 
@@ -563,6 +570,20 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     residual_intercept, residual_slope, residual_rms, residual_rms_envelope = initialize_residuals(
         sp, project_path, instrument
     )
+    # add a sanity check that the residual maps cannot be only filled with zeros
+    if not np.any(residual_rms_envelope):
+        tprint(f'  WARNING: Residual RMS envelope map is empty. Check if residual files are correctly generated.', color='orange')
+        # make this an error
+        raise ValueError('Residual RMS envelope map is empty. Check if residual files are correctly generated.')
+    # Verify slope and intercept maps are not all-zero (would indicate residual files were never written)
+    if not np.any(np.isfinite(residual_slope) & (residual_slope != 0)):
+        raise ValueError('Residual slope map is all-zero or all-NaN — residual files were not generated correctly. '
+                         'Re-run residuals.py before predict_abso.py.')
+    if not np.any(np.isfinite(residual_intercept) & (residual_intercept != 0)):
+        raise ValueError('Residual intercept map is all-zero or all-NaN — residual files were not generated correctly. '
+                         'Re-run residuals.py before predict_abso.py.')
+    else:
+        tprint(f'  Residual correction maps loaded successfully.')
 
     # Extract atmospheric parameters
     hdr['PRESSURE'] = (hdr['HIERARCH ESO TEL AMBI PRES START'] +

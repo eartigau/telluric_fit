@@ -48,8 +48,15 @@ import os
 import sys
 import warnings
 
-# Suppress FITS warnings for cleaner output
-warnings.filterwarnings('ignore', category=RuntimeWarning)
+# Coding errors (deprecated APIs, future incompatibilities) should crash immediately
+# rather than silently producing NaN-filled outputs.
+warnings.filterwarnings('error', category=DeprecationWarning)
+warnings.filterwarnings('error', category=FutureWarning)
+# Suppress only the specific expected FITS/NaN runtime warnings
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*All-NaN.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*Mean of empty slice.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid value encountered.*')
+warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*Card is too long.*')
 warnings.filterwarnings('ignore', message='.*VerifyWarning.*')
 
@@ -310,7 +317,7 @@ if rebuild_table:
         for key in keys:
             try:
                 tbl[key][tbl['FILENAME'] == file] = h[key]
-            except:
+            except (KeyError, TypeError):
                 tprint(f'Warning: key {key} not found in file {file}', color='orange')
     tbl.write(big_table_file, format='csv', overwrite=True)
 else:
@@ -361,7 +368,7 @@ for key in keys:
 
     try:
         tbl[key] = tbl[key].astype(float)
-    except:
+    except (ValueError, TypeError):
         pass
 
 
