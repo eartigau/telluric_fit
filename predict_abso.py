@@ -570,10 +570,13 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     residual_intercept, residual_slope, residual_rms, residual_rms_envelope = initialize_residuals(
         sp, project_path, instrument
     )
+
     # add a sanity check that the residual maps cannot be only filled with zeros
     if not np.any(residual_rms_envelope):
         tprint(f'  WARNING: Residual RMS envelope map is empty. Check if residual files are correctly generated.', color='orange')
-        # make this an error
+    #    # make this an error
+
+        print(sp, project_path, instrument)
         raise ValueError('Residual RMS envelope map is empty. Check if residual files are correctly generated.')
     # Verify slope and intercept maps are not all-zero (would indicate residual files were never written)
     if not np.any(np.isfinite(residual_slope) & (residual_slope != 0)):
