@@ -69,14 +69,19 @@ def _fast_berv_shift(residuals, wave, bervs, to_stellar=True):
     return shifted
 
 
-def _load_single_file(file_and_keys):
-    """Load a single FITS file and extract header keywords. Used for parallel loading."""
+def _load_header_only(file_and_keys):
+    """Load header keywords from a single FITS file (no pixel data). Used for parallel loading."""
     file, keys = file_and_keys
-    trans = getdata_safe(file)
     hdr = getheader_safe(file)
     hdr = hotstar(hdr)
     header_vals = {key: hdr[key] for key in keys}
-    return trans, header_vals
+    return header_vals
+
+
+def _load_order_from_file(file_and_iord):
+    """Load a single spectral order (one row) from a FITS file."""
+    file, iord = file_and_iord
+    return getdata_safe(file)[iord]
 
 
 def _process_single_order(args):
@@ -457,46 +462,28 @@ if __name__ == '__main__':
         tbl0[key] = np.zeros(len(files), dtype='U999')
 
 
-    # Parallel loading of FITS files for speedup
-    print(f'Loading {len(files)} FITS files using {N_WORKERS} workers...')
-    print(f'  This may take a few minutes for large datasets.')
-    big_cube = np.zeros((waveref.shape[0], waveref.shape[1], len(files)))
-
-    # Use ThreadPoolExecutor for I/O-bound FITS loading (GIL released during I/O)
-    # Use as_completed for real-time progress updates
+    # -------------------------------------------------------------------------
+    # Pass 1: load headers only (no pixel data) — memory-efficient
+    # -------------------------------------------------------------------------
+    print(f'Loading headers from {len(files)} FITS files using {N_WORKERS} workers...')
     file_args = [(f, keys) for f in files]
-    results = [None] * len(files)
+    header_results = [None] * len(files)
     t0 = time.time()
 
     with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
-        # Submit all tasks with their index
-        future_to_idx = {executor.submit(_load_single_file, args): i for i, args in enumerate(file_args)}
-        
-        # Process results as they complete
-        for j, future in enumerate(tqdm(as_completed(future_to_idx), total=len(files), 
-                                         desc='Loading FITS', unit='files', 
-                                         bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
+        future_to_idx = {executor.submit(_load_header_only, args): i for i, args in enumerate(file_args)}
+        for j, future in enumerate(tqdm(as_completed(future_to_idx), total=len(files),
+                                        desc='Loading headers', unit='files',
+                                        bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
             idx = future_to_idx[future]
-            results[idx] = future.result()
-            
-            # Extra status every 500 files
-            if (j + 1) % 500 == 0:
-                elapsed = time.time() - t0
-                rate = (j + 1) / elapsed
-                remaining = (len(files) - j - 1) / rate
-                print(f'  Loaded {j+1}/{len(files)} files ({rate:.1f} files/s, ~{remaining:.0f}s remaining)')
+            header_results[idx] = future.result()
 
     elapsed = time.time() - t0
-    print(f'  Finished loading in {elapsed:.1f}s ({len(files)/elapsed:.1f} files/s)')
+    print(f'  Finished loading headers in {elapsed:.1f}s ({len(files)/elapsed:.1f} files/s)')
 
-    print(f'Populating data cube ({len(results)} files)...')
-    t0_cube = time.time()
-    for i, (trans, header_vals) in enumerate(tqdm(results, desc='Populating cube', unit='files',
-                                                   bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
-        big_cube[:, :, i] = trans
+    for i, header_vals in enumerate(header_results):
         for key in keys:
             tbl0[key][i] = header_vals[key]
-    print(f'  Cube populated in {time.time() - t0_cube:.1f}s')
 
     # Attempt to cast columns to numeric or boolean where applicable
     for key in keys:
@@ -508,79 +495,70 @@ if __name__ == '__main__':
         if np.all(np.isin(tbl0[key], ['True', 'False'])):
             tbl0[key] = tbl0[key] == 'True'
 
-
     # -------------------------------------------------------------------------
-    # Process residuals order-by-order (PARALLELIZED)
+    # Pass 2+3: for each order, load only that order's data then process it.
+    # Peak memory is O(n_files * n_pix) instead of O(n_orders * n_pix * n_files).
     # -------------------------------------------------------------------------
     residuals_dir = os.path.join(project_path, f'residuals_{instrument}')
     os.makedirs(residuals_dir, exist_ok=True)
 
-    # Convert table to dict for pickling across processes
     tbl0_dict = {col: np.array(tbl0[col]) for col in tbl0.colnames}
 
-    # Prepare arguments for each order
     n_orders = waveref.shape[0]
-    print(f'Processing {n_orders} orders using {N_WORKERS} workers...')
+    print(f'Processing {n_orders} orders (loading one order at a time to save memory)...')
 
-    order_args = []
-    for iord in range(n_orders):
+    order_results = []
+    t0_orders = time.time()
+    for iord in tqdm(range(n_orders), desc='Processing orders', unit='order',
+                     bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'):
+        # Load this order from all files in parallel (shape: n_files x n_pix)
+        order_data = np.zeros((len(files), waveref.shape[1]))
+        order_file_args = [(f, iord) for f in files]
+        with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
+            future_to_idx = {executor.submit(_load_order_from_file, args): i
+                             for i, args in enumerate(order_file_args)}
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                order_data[idx] = future.result()
+
+        # _process_single_order expects order_data shaped (n_pix, n_files)
         args = (
             iord,
-            big_cube[iord, :, :],  # order_data
-            waveref[iord, :],       # wave_order
-            main_abso[iord, :],     # main_abso_order
-            nanmask[iord, :],       # nanmask_order
+            order_data.T,
+            waveref[iord, :],
+            main_abso[iord, :],
+            nanmask[iord, :],
             tbl0_dict,
             residuals_dir
         )
-        order_args.append(args)
+        result = _process_single_order(args)
+        order_results.append(result)
 
-    # Process orders in parallel
-    t0_orders = time.time()
-    with ProcessPoolExecutor(max_workers=N_WORKERS) as executor:
-        order_results = list(tqdm(
-            executor.map(_process_single_order, order_args),
-            total=n_orders,
-            desc='Processing orders',
-            unit='order',
-            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'
-        ))
-
-    elapsed_orders = time.time() - t0_orders
-    print(f'  Finished processing orders in {elapsed_orders:.1f}s ({n_orders/elapsed_orders:.2f} orders/s)')
-
-    # Collect results into map arrays
-    for result in order_results:
-        iord = result['iord']
         map_slopes[iord, :] = result['slope_offset']
         map_intercepts[iord, :] = result['dc_offset']
         map_rms[iord, :] = result['rms']
         map_rms_envelope[iord, :] = result['rms_envelope']
 
-    # Handle paper figures (only for order 0, run sequentially after parallel processing)
-    enabled, output_dir = get_paper_figures_config()
-    if enabled and not _paper_figure_done['fig4']:
-        # Re-process order 0 to generate figure 4 (quick since it's just one order)
-        iord = 0
-        tbl = Table(tbl0)
-        main_abso_order = main_abso[iord, :]
-        residuals_local = big_cube[iord, :, :].T * nanmask[iord, :]
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            residuals_local -= np.nanmedian(residuals_local)
-        
-        # Filter table
-        keep = tbl['HOTSTAR'] & (tbl['EXPO_H2O'] < 7.0)
-        tbl = tbl[keep]
-        residuals_local = residuals_local[keep, :]
-        
-        _generate_paper_fig4_residual_model(
-            waveref[iord, :], residuals_local, tbl, 
-            map_slopes[iord, :], map_intercepts[iord, :], 
-            main_abso_order, output_dir
-        )
-        _paper_figure_done['fig4'] = True
+        # Generate paper figure 4 inline after order 0 (while order_data is still in memory)
+        enabled, output_dir_pf = get_paper_figures_config()
+        if enabled and not _paper_figure_done['fig4'] and iord == 0:
+            tbl = Table(tbl0)
+            residuals_local = order_data * nanmask[iord, :]
+            with warnings.catch_warnings():
+                warnings.simplefilter('ignore', RuntimeWarning)
+                residuals_local -= np.nanmedian(residuals_local)
+            keep = tbl['HOTSTAR'] & (tbl['EXPO_H2O'] < 7.0)
+            tbl = tbl[keep]
+            residuals_local = residuals_local[keep, :]
+            _generate_paper_fig4_residual_model(
+                waveref[iord, :], residuals_local, tbl,
+                map_slopes[iord, :], map_intercepts[iord, :],
+                main_abso[iord, :], output_dir_pf
+            )
+            _paper_figure_done['fig4'] = True
+
+    elapsed_orders = time.time() - t0_orders
+    print(f'  Finished processing orders in {elapsed_orders:.1f}s ({n_orders/elapsed_orders:.2f} orders/s)')
 
     # -------------------------------------------------------------------------
     # Generate multi-page PDF summary
