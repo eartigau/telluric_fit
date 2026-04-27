@@ -189,60 +189,42 @@ def _process_single_order(args):
     o2_mask = np.isin(main_abso_order, [1, 2, 3])
     morning = np.array(tbl['SUNSETD'] < 5.0)
     
-    # --- Vectorized linear fit for H2O/None pixels ---
+    # --- Robust per-pixel linear fit for H2O/None pixels ---
     h2o_pix = valid_pix & h2o_mask
     if np.any(h2o_pix):
         x = np.array(tbl['EXPO_H2O'])
-        y = residuals[:, h2o_pix]
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            x_mean = np.nanmean(x)
-            y_mean = np.nanmean(y, axis=0)
-            x_centered = x[:, None] - x_mean
-            y_centered = y - y_mean[None, :]
-            mask = np.isfinite(y)
-            x_centered_masked = np.where(mask, x_centered, 0)
-            y_centered_masked = np.where(mask, y_centered, 0)
-            n_valid = np.sum(mask, axis=0)
-            
-            cov_xy = np.sum(x_centered_masked * y_centered_masked, axis=0) / np.maximum(n_valid - 1, 1)
-            var_x = np.nanvar(x)
-            
-            slopes = cov_xy / var_x
-            intercepts = y_mean - slopes * x_mean
-        
-        slope_offset[h2o_pix] = slopes
-        dc_offset[h2o_pix] = intercepts
-        recon[:, h2o_pix] = intercepts[None, :] + slopes[None, :] * x[:, None]
+        h2o_indices = np.where(h2o_pix)[0]
+        for ipix in h2o_indices:
+            y = residuals[:, ipix]
+            valid = np.isfinite(y)
+            if np.sum(valid) < 3:
+                continue
+            try:
+                fit, _ = mp.robust_polyfit(x[valid], y[valid], 1, 3)
+                slope_offset[ipix] = fit[0]
+                dc_offset[ipix] = fit[1]
+                recon[:, ipix] = fit[1] + fit[0] * x
+            except Exception:
+                pass
     
-    # --- Vectorized linear fit for O2/CO2/CH4 pixels (morning only) ---
+    # --- Robust per-pixel linear fit for O2/CO2/CH4 pixels (morning only) ---
     o2_pix = valid_pix & o2_mask
     if np.any(o2_pix):
         x_full = np.array(tbl['AIRMASS'])
         x = x_full[morning]
-        y = residuals[morning, :][:, o2_pix]
-        
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', RuntimeWarning)
-            x_mean = np.nanmean(x)
-            y_mean = np.nanmean(y, axis=0)
-            x_centered = x[:, None] - x_mean
-            y_centered = y - y_mean[None, :]
-            mask = np.isfinite(y)
-            x_centered_masked = np.where(mask, x_centered, 0)
-            y_centered_masked = np.where(mask, y_centered, 0)
-            n_valid = np.sum(mask, axis=0)
-            
-            cov_xy = np.sum(x_centered_masked * y_centered_masked, axis=0) / np.maximum(n_valid - 1, 1)
-            var_x = np.nanvar(x)
-            
-            slopes = cov_xy / var_x
-            intercepts = y_mean - slopes * x_mean
-        
-        slope_offset[o2_pix] = slopes
-        dc_offset[o2_pix] = intercepts
-        recon[:, o2_pix] = intercepts[None, :] + slopes[None, :] * x_full[:, None]
+        o2_indices = np.where(o2_pix)[0]
+        for ipix in o2_indices:
+            y = residuals[morning, ipix]
+            valid = np.isfinite(y)
+            if np.sum(valid) < 3:
+                continue
+            try:
+                fit, _ = mp.robust_polyfit(x[valid], y[valid], 1, 3)
+                slope_offset[ipix] = fit[0]
+                dc_offset[ipix] = fit[1]
+                recon[:, ipix] = fit[1] + fit[0] * x_full
+            except Exception:
+                pass
     
     with warnings.catch_warnings():
         warnings.simplefilter('ignore', RuntimeWarning)
@@ -264,7 +246,9 @@ def _process_single_order(args):
         'slope_offset': slope_offset,
         'dc_offset': dc_offset,
         'rms': rms,
-        'rms_envelope': rms_envelope
+        'rms_envelope': rms_envelope,
+        'residuals': residuals,   # processed, BERV-aligned, detrended; shape (n_exp_filtered, n_pix)
+        'tbl': tbl,               # filtered table (HOTSTAR & EXPO_H2O < 7)
     }
 
 # -----------------------------------------------------------------------------
@@ -352,9 +336,22 @@ def _generate_paper_fig4_residual_model(wave, residuals, tbl, slope_offset, dc_o
     Shows scatter of residuals vs EXPO_H2O for example pixels,
     with fitted linear trends.
     """
-    # Select 4 example pixels at different wavelengths
+    # Select 4 example pixels at different wavelengths, restricted to H2O/None
+    # absorber pixels (main_abso == 0 or 4) — these are the ones whose slope was
+    # fit against EXPO_H2O. O2/CO2/CH4 pixels are fit against AIRMASS, so plotting
+    # them against EXPO_H2O would show a misleadingly flat line.
     npix = len(wave)
-    pix_indices = [npix//5, 2*npix//5, 3*npix//5, 4*npix//5]
+    h2o_or_none = (main_abso_order == 0) | (main_abso_order == 4)
+    valid_pix_for_plot = np.where(h2o_or_none & np.isfinite(slope_offset))[0]
+
+    if len(valid_pix_for_plot) < 4:
+        print(f'  fig4: only {len(valid_pix_for_plot)} valid H2O/None pixels — skipping figure')
+        return
+
+    # Pick 4 pixels evenly spaced along the order in wavelength
+    quantiles = [0.2, 0.4, 0.6, 0.8]
+    pix_indices = [valid_pix_for_plot[int(q * (len(valid_pix_for_plot) - 1))]
+                   for q in quantiles]
     
     fig, axes = plt.subplots(2, 2, figsize=(10, 8))
     axes = axes.flatten()
@@ -375,6 +372,7 @@ def _generate_paper_fig4_residual_model(wave, residuals, tbl, slope_offset, dc_o
         slope = slope_offset[ipix]
         intercept = dc_offset[ipix]
         if np.isfinite(slope) and np.isfinite(intercept):
+            print(f'Pixel {ipix} ({wave[ipix]:.1f} nm): slope={slope:.4f}, intercept={intercept:.4f}')
             x_fit = np.linspace(np.min(expo_h2o), np.max(expo_h2o), 100)
             y_fit = intercept + slope * x_fit
             ax.plot(x_fit, y_fit, 'r-', lw=2, label=f'slope={slope:.4f}')
@@ -495,6 +493,15 @@ if __name__ == '__main__':
         if np.all(np.isin(tbl0[key], ['True', 'False'])):
             tbl0[key] = tbl0[key] == 'True'
 
+    # bad is where EXPO_H2O <0.01 (shouldn't happen but just in case)
+    bad = tbl0['EXPO_H2O'] < 0.01
+    if np.any(bad):
+        print(f'  WARNING: Found {np.sum(bad)} exposures with EXPO_H2O < 0.01. These will be excluded from analysis.')
+        tbl0 = tbl0[~bad]   
+        # Update files list to match filtered table
+        files = tbl0['FILE'].tolist()
+
+
     # -------------------------------------------------------------------------
     # Pass 2+3: for each order, load only that order's data then process it.
     # Peak memory is O(n_files * n_pix) instead of O(n_orders * n_pix * n_files).
@@ -539,19 +546,11 @@ if __name__ == '__main__':
         map_rms[iord, :] = result['rms']
         map_rms_envelope[iord, :] = result['rms_envelope']
 
-        # Generate paper figure 4 inline after order 0 (while order_data is still in memory)
+        # Generate paper figure 4 after order 0 using the fully processed residuals
         enabled, output_dir_pf = get_paper_figures_config()
         if enabled and not _paper_figure_done['fig4'] and iord == 0:
-            tbl = Table(tbl0)
-            residuals_local = order_data * nanmask[iord, :]
-            with warnings.catch_warnings():
-                warnings.simplefilter('ignore', RuntimeWarning)
-                residuals_local -= np.nanmedian(residuals_local)
-            keep = tbl['HOTSTAR'] & (tbl['EXPO_H2O'] < 7.0)
-            tbl = tbl[keep]
-            residuals_local = residuals_local[keep, :]
             _generate_paper_fig4_residual_model(
-                waveref[iord, :], residuals_local, tbl,
+                waveref[iord, :], result['residuals'], result['tbl'],
                 map_slopes[iord, :], map_intercepts[iord, :],
                 main_abso[iord, :], output_dir_pf
             )
