@@ -3,7 +3,7 @@
 
 # Instrument settings
 instrument: 'NIRPS'              # NIRPS or SPIROU
-template_style: 'model'          # model or self
+template_style: 'smart'          # model, self, or smart (self if template exists, else model)
 
 # Hot stars used for telluric fitting
 # These objects have featureless spectra ideal for measuring atmospheric absorption
@@ -63,38 +63,38 @@ hot_stars:
 # Analogous to hot_stars above: add one name per line.
 science_targets:
   - PROXIMA
-#  - TOI270
-#  - GJ1
-#  - GJ3618
-#  - GJ717
-#  - GJ3307
-#  - GL406
-#  - L230M188
-#  - SCR_J1546M5534
-#  - TIC304392811
-#  - LP_851M346
-#  - GJ_1028
-#  - LP885M35
-#  - DENIS_J104814_6M395606
-#  - SIPS_J1259M4336
-#  - LP_500M35
-#  - GJ3252
-#  - GJ3693
-#  - GL299
-#  - NLTT5556
-#  - GJ3622
-#  - LP888M18
-#  - TEEGARDENS_STAR
-#  - LP_938M71
-#  - GJ3618
-#  - GL406
-#  - LP_783M2
-#  - TOI3494
-#  - WASP193 
-#  - BPS_CS_22881M0003
-#  - TIC151584725
-#  - TIC427346731
-#  - SMETHELLS_20
+  - TOI270
+  - GJ1
+  - GJ3618
+  - GJ717
+  - GJ3307
+  - GL406
+  - L230M188
+  - SCR_J1546M5534
+  - TIC304392811
+  - LP_851M346
+  - GJ_1028
+  - LP885M35
+  - DENIS_J104814_6M395606
+  - SIPS_J1259M4336
+  - LP_500M35
+  - GJ3252
+  - GJ3693
+  - GL299
+  - NLTT5556
+  - GJ3622
+  - LP888M18
+  - TEEGARDENS_STAR
+  - LP_938M71
+  - GJ3618
+  - GL406
+  - LP_783M2
+  - TOI3494
+  - WASP193 
+  - BPS_CS_22881M0003
+  - TIC151584725
+  - TIC427346731
+  - SMETHELLS_20
     
 
 
@@ -178,3 +178,32 @@ slinky:
 paper_figures:
   enabled: true                   # Set to true to generate paper figures
   output_dir: 'paper_figures'      # Folder for paper-quality figures (relative to project_path)
+
+# =============================================================================
+# Machine-specific configuration
+# The code checks each machine's 'detect_path' to determine which machine
+# is being used. The first matching machine configuration will be applied.
+# =============================================================================
+machines:
+  FIR:
+    detect_path: '/home/eartigau/.fir_token'
+    project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit'
+    doplot: false                # Don't show interactive plots on FIR
+    n_cores: 8                   # Number of cores for parallel processing
+    # Environment setup for Compute Canada clusters
+    library_path: '/cvmfs/soft.computecanada.ca/gentoo/2023/x86-64-v3/usr/lib64'
+    conda_env: 'tellu_env'
+
+  MacBook-eartigau:
+    detect_path: '/Users/eartigau/telluric_fit'
+    project_path: '/Users/eartigau/telluric_fit'
+    doplot: true                 # Show interactive plots on MacBook
+    n_cores: 1                   # Serial processing on MacBook
+
+# =============================================================================
+# Batch settings
+# =============================================================================
+batch:
+  name: 'v28Apr2026'          # Batch identifier
+  generate_plots: true           # Generate diagnostic PDF plots
+  plot_orders: [30, 60]          # Order range for plots [min, max], null for all

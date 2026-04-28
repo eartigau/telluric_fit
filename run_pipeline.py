@@ -130,15 +130,10 @@ def main():
     default_targets = cfg.get('science_targets', [])
     default_template = cfg.get('template_style', 'model')
 
-    # Read batch name from batch_config.yaml
-    batch_cfg_path = os.path.join(SCRIPT_DIR, 'batch_config.yaml')
-    default_batch = 'skypca_v5'
-    if os.path.exists(batch_cfg_path):
-        with open(batch_cfg_path, 'r') as fh:
-            batch_yaml = yaml.safe_load(fh)
-        batch_section = batch_yaml.get('batch', {})
-        default_batch = (batch_section.get('name') if isinstance(batch_section, dict)
-                         else batch_yaml.get('batch_name', default_batch))
+    # Read batch name from telluric_config.yaml
+    batch_section = cfg.get('batch', {})
+    default_batch = (batch_section.get('name') if isinstance(batch_section, dict)
+                     else cfg.get('batch_name', 'skypca_v5'))
 
     parser = argparse.ArgumentParser(
         description='Full telluric correction pipeline (rsync → slinky → residuals → telluric)',
@@ -152,7 +147,7 @@ def main():
     parser.add_argument('--batch', default=default_batch,
                         help='Batch name (output identifier)')
     parser.add_argument('--template', default=default_template,
-                        choices=['model', 'self'],
+                        choices=['model', 'self', 'smart'],
                         help='Stellar template style')
 
     # Step control

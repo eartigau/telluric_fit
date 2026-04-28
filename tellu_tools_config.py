@@ -124,9 +124,9 @@ def get_project_path() -> str:
     if _cached_project_path is not None:
         return _cached_project_path
     
-    # Load machine configurations from batch_config.yaml
+    # Load machine configurations from telluric_config.yaml
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'batch_config.yaml')
+    config_path = os.path.join(script_dir, 'telluric_config.yaml')
     
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:

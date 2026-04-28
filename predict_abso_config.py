@@ -25,9 +25,9 @@ DEFAULT_PARAMS = {
 
 
 def _load_machine_config() -> Dict[str, Any]:
-    """Load machine-specific config from batch_config.yaml."""
+    """Load machine-specific config from telluric_config.yaml."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'batch_config.yaml')
+    config_path = os.path.join(script_dir, 'telluric_config.yaml')
     
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
@@ -80,8 +80,8 @@ def get_batch_config(batch_name: str, instrument: str, obj: str,
     if instrument not in ['NIRPS', 'SPIROU']:
         raise ValueError(f"Unknown instrument: {instrument}. Must be 'NIRPS' or 'SPIROU'")
 
-    if template_style not in ['model', 'self']:
-        raise ValueError(f"Unknown template_style: {template_style}. Must be 'model' or 'self'")
+    if template_style not in ['model', 'self', 'smart']:
+        raise ValueError(f"Unknown template_style: {template_style}. Must be 'model', 'self', or 'smart'")
 
     # Load machine-specific settings (doplot, n_cores)
     machine_config = _load_machine_config()

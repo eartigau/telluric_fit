@@ -3,14 +3,15 @@
 SRC_BASE="/scratch/eartigau/spirou_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
+SRC_TEMPLATES="$SRC_BASE/red/other"
 
 # Resolve script directory (works regardless of where the script is invoked from)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine project_path from batch_config.yaml by checking detect_path for each machine
-BATCH_CONFIG="$SCRIPT_DIR/batch_config.yaml"
+# Determine project_path from telluric_config.yaml by checking detect_path for each machine
+BATCH_CONFIG="$SCRIPT_DIR/telluric_config.yaml"
 if [ ! -f "$BATCH_CONFIG" ]; then
-    echo "ERROR: batch_config.yaml not found at $BATCH_CONFIG"
+    echo "ERROR: telluric_config.yaml not found at $BATCH_CONFIG"
     exit 1
 fi
 
@@ -30,7 +31,7 @@ print('ERROR: No matching machine detected. Checked detect_path for:', file=sys.
 for name, mc in machines.items():
     print(f'  {name}: {mc.get(\"detect_path\", \"(none)\")}', file=sys.stderr)
 print(f'None of these paths exist on this machine.', file=sys.stderr)
-print(f'Add or update your machine entry in: $BATCH_CONFIG', file=sys.stderr)
+print(f'Add or update your machine entry in: $BATCH_CONFIG (telluric_config.yaml)', file=sys.stderr)
 sys.exit(1)
 ")
 if [ $? -ne 0 ]; then
@@ -41,7 +42,8 @@ DST_CALIB="$PROJECT_PATH/calib_SPIROU"
 DST_SCIDATA="$PROJECT_PATH/scidata_SPIROU"
 DST_HOTSTARS="$PROJECT_PATH/hotstars_SPIROU"
 DST_ORIG="$PROJECT_PATH/orig_SPIROU"
-mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS" "$DST_ORIG"
+DST_TEMPLATES="$PROJECT_PATH/templates_SPIROU"
+mkdir -p "$DST_CALIB" "$DST_SCIDATA" "$DST_HOTSTARS" "$DST_ORIG" "$DST_TEMPLATES"
 
 echo ""
 echo "========================================"
@@ -128,6 +130,20 @@ for star in "${HOT_STARS[@]}"; do
     fi
 done
 echo "[3/3] Telluric stars OK"
+
+# Sync stellar templates for science targets
+echo ""
+echo "[4/4] Syncing stellar templates from $SRC_TEMPLATES"
+for target in "${SCIENCE_TARGETS[@]}"; do
+    TEMPLATE_FILE="Template_s1dv_${target}_sc1d_v_file_A.fits"
+    if [ -f "$SRC_TEMPLATES/$TEMPLATE_FILE" ]; then
+        echo "  -> $target : $TEMPLATE_FILE"
+        rsync -av --progress "$SRC_TEMPLATES/$TEMPLATE_FILE" "$DST_TEMPLATES/" 2>/dev/null || true
+    else
+        echo "  (no template for $target in $SRC_TEMPLATES)"
+    fi
+done
+echo "[4/4] Templates OK"
 
 echo ""
 echo "========================================"

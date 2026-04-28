@@ -106,6 +106,14 @@ def load_template(hdr: fits.Header, template_style: str,
     spl_dv : InterpolatedUnivariateSpline
         Spline interpolator for template velocity gradient
     """
+    if template_style == 'smart':
+        # Use empirical template if available, otherwise fall back to model
+        template_file_check = os.path.join(
+            project_path,
+            f'templates_{instrument}/Template_s1dv_{obj}_sc1d_v_file_A.fits'
+        )
+        template_style = 'self' if os.path.exists(template_file_check) else 'model'
+
     if template_style == 'model':
         # Fetch synthetic template based on stellar Teff
         spl, spl_dv = tt.fetch_template(hdr)
@@ -1202,14 +1210,14 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
 
 
 
-def load_batch_config_yaml(config_path: str = 'batch_config.yaml') -> dict:
+def load_batch_config_yaml(config_path: str = 'telluric_config.yaml') -> dict:
     """
     Load batch configuration from YAML file.
     
     Parameters
     ----------
     config_path : str
-        Path to the batch config YAML file
+        Path to the config YAML file (defaults to telluric_config.yaml)
     
     Returns
     -------
@@ -1231,10 +1239,10 @@ def load_batch_config_yaml(config_path: str = 'batch_config.yaml') -> dict:
 
 
 if __name__ == '__main__':
-    # Load batch_config.yaml to get defaults
+    # Load telluric_config.yaml to get defaults
     batch_yaml = load_batch_config_yaml()
     
-    # Extract defaults from batch_config.yaml
+    # Extract defaults from telluric_config.yaml
     if 'batch' in batch_yaml and isinstance(batch_yaml['batch'], dict):
         default_batch_name = batch_yaml['batch'].get('name', 'skypca_v5')
     else:
@@ -1257,7 +1265,7 @@ if __name__ == '__main__':
     parser.add_argument('--object', type=str, default=None,
                        help='Object name')
     parser.add_argument('--template', type=str, default=default_template,
-                       choices=['model', 'self'],
+                       choices=['model', 'self', 'smart'],
                        help='Template style')
     parser.add_argument('--list-objects', action='store_true',
                        help='List available objects and exit')
@@ -1292,23 +1300,20 @@ if __name__ == '__main__':
             batch_name = config.get('batch_name', 'skypca_v5')
         instrument = config.get('instrument', 'NIRPS')
         template_style = config.get('template_style', 'model')
-        objects = config.get('objects', [])
+        objects = config.get('science_targets', [])
         
         if not objects:
-            tprint("ERROR: No objects specified in config file", color='red')
+            tprint("ERROR: No science_targets specified in config file", color='red')
             sys.exit(1)
         
-        # Process each object in the config
-        for obj_config in objects:
-            obj_name = obj_config.get('name')
-            obj_template = obj_config.get('template_style', template_style)
-            
-            tprint(f"Processing {obj_name} with {obj_template} template", color='cyan')
+        # Process each object in science_targets
+        for obj_name in objects:
+            tprint(f"Processing {obj_name} with {template_style} template", color='cyan')
             main(
                 batch_name=batch_name,
                 instrument=instrument,
                 obj=obj_name,
-                template_style=obj_template,
+                template_style=template_style,
                 force_recompute=args.recompute
             )
             # Only recompute on first object
