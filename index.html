@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telluric Correction Pipeline — User Manual</title>
+  <style>
+    /* ── Reset & fonts ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --surface2:  #22263a;
+      --border:    #2e3350;
+      --accent:    #5b8dee;
+      --accent2:   #38bdf8;
+      --green:     #4ade80;
+      --orange:    #fb923c;
+      --red:       #f87171;
+      --cyan:      #67e8f9;
+      --text:      #e2e8f0;
+      --muted:     #8892a8;
+      --code-bg:   #12151f;
+      --sidebar-w: 260px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-size: 15px;
+    }
+
+    /* ── Login overlay ── */
+    #login-overlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+    }
+    #login-overlay.hidden { display: none; }
+    .login-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 48px 56px;
+      width: min(480px, 90vw);
+      text-align: center;
+      box-shadow: 0 24px 64px #00000088;
+    }
+    .login-box .logo { font-size: 2.6rem; margin-bottom: 8px; }
+    .login-box h1 { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
+    .login-box p  { color: var(--muted); margin-bottom: 32px; font-size: 0.92rem; }
+    .login-box input[type="password"] {
+      width: 100%;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 1rem;
+      color: var(--text);
+      margin-bottom: 16px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .login-box input[type="password"]:focus { border-color: var(--accent); }
+    .login-box button {
+      width: 100%;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s, transform .1s;
+    }
+    .login-box button:hover  { background: #4a7de0; }
+    .login-box button:active { transform: scale(.98); }
+    .login-error {
+      color: var(--red);
+      font-size: 0.88rem;
+      margin-top: 12px;
+      min-height: 1.2em;
+    }
+
+    /* ── Page shell ── */
+    #page { display: none; }
+    #page.visible { display: flex; min-height: 100vh; }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: var(--sidebar-w);
+      min-width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      padding: 24px 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .sidebar-logo {
+      padding: 0 20px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo .title { font-weight: 700; font-size: 1rem; color: var(--accent2); }
+    .sidebar-logo .sub   { font-size: 0.78rem; color: var(--muted); margin-top: 2px; }
+    nav a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 20px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      border-left: 3px solid transparent;
+      transition: color .15s, border-color .15s, background .15s;
+    }
+    nav a:hover  { color: var(--text); background: var(--surface2); }
+    nav a.active { color: var(--accent); border-left-color: var(--accent); background: var(--surface2); }
+    nav .section-label {
+      padding: 18px 20px 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Main content ── */
+    #content {
+      flex: 1;
+      min-width: 0;
+      padding: 48px 56px;
+      max-width: 900px;
+    }
+
+    /* ── Typography ── */
+    h1 { font-size: 2rem; font-weight: 800; margin-bottom: 8px; color: #fff; }
+    h2 {
+      font-size: 1.4rem; font-weight: 700;
+      margin: 52px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      color: #fff;
+    }
+    h3 { font-size: 1.05rem; font-weight: 700; margin: 28px 0 10px; color: var(--accent2); }
+    h4 { font-size: 0.95rem; font-weight: 600; margin: 20px 0 8px; color: var(--text); }
+    p  { margin-bottom: 14px; }
+    ul, ol { padding-left: 1.4em; margin-bottom: 14px; }
+    li { margin-bottom: 4px; }
+    a  { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    strong { color: #fff; }
+    hr { border: none; border-top: 1px solid var(--border); margin: 36px 0; }
+
+    /* ── Code ── */
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-size: 0.87em;
+      color: var(--cyan);
+    }
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 22px;
+      overflow-x: auto;
+      margin: 14px 0 20px;
+      position: relative;
+    }
+    pre code {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 0.875rem;
+      color: var(--text);
+      white-space: pre;
+    }
+    .kw  { color: #c792ea; }
+    .str { color: #c3e88d; }
+    .cmt { color: #546e7a; font-style: italic; }
+    .num { color: #f78c6c; }
+    .flag{ color: var(--orange); }
+
+    /* ── Tables ── */
+    table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 0.88rem; }
+    th { background: var(--surface2); padding: 9px 14px; text-align: left; font-weight: 600; border: 1px solid var(--border); color: var(--accent2); }
+    td { padding: 8px 14px; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #161927; }
+
+    /* ── Callout boxes ── */
+    .callout {
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin: 18px 0;
+      border-left: 4px solid;
+      font-size: 0.9rem;
+    }
+    .callout.tip    { background: #0f2820; border-color: var(--green);  color: #a7f3d0; }
+    .callout.warn   { background: #271c0f; border-color: var(--orange); color: #fed7aa; }
+    .callout.info   { background: #0d1e38; border-color: var(--accent); color: #bfdbfe; }
+    .callout.danger { background: #2d0f0f; border-color: var(--red);   color: #fecaca; }
+    .callout strong { color: inherit; }
+
+    /* ── Step badges ── */
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.8rem;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px 22px;
+      margin: 14px 0;
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .step-card .num {
+      font-size: 2rem;
+      font-weight: 800;
+      color: var(--border);
+      line-height: 1;
+      min-width: 28px;
+    }
+    .step-card .body h4 { margin-top: 0; }
+    .step-card .body p  { margin: 0; color: var(--muted); font-size: 0.88rem; }
+
+    /* ── File tree ── */
+    .filetree {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.83rem;
+      line-height: 1.9;
+    }
+    .filetree .dir  { color: var(--accent2); font-weight: 600; }
+    .filetree .file { color: var(--text); }
+    .filetree .muted{ color: var(--muted); }
+
+    /* ── Color legend ── */
+    .color-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    /* ── Hero section ── */
+    .hero {
+      background: linear-gradient(135deg, var(--surface) 0%, #1a2240 100%);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px 36px;
+      margin-bottom: 36px;
+    }
+    .hero .badge {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+    .hero h1 { margin-bottom: 10px; }
+    .hero p   { color: var(--muted); margin-bottom: 0; font-size: 0.95rem; }
+
+    /* ── Pipeline flow diagram ── */
+    .flow {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 20px 0;
+    }
+    .flow-step {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+    }
+    .flow-connector {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 40px;
+      min-width: 40px;
+    }
+    .flow-dot {
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid var(--bg);
+      flex-shrink: 0;
+    }
+    .flow-line {
+      flex: 1;
+      width: 2px;
+      background: var(--border);
+    }
+    .flow-body {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+      margin: 4px 0 12px;
+      flex: 1;
+    }
+    .flow-body .cmd  { color: var(--cyan); font-family: monospace; font-size: 0.85rem; }
+    .flow-body .desc { color: var(--muted); font-size: 0.82rem; margin-top: 2px; }
+    .flow-body .out  { color: var(--green); font-size: 0.8rem; margin-top: 4px; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      #sidebar { display: none; }
+      #content { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════ LOGIN OVERLAY ══════════════════════════ -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div class="logo">🌌</div>
+    <h1>Telluric Correction Pipeline</h1>
+    <p>Enter your password to access the user manual.</p>
+    <input type="password" id="pw-input" placeholder="Password" autocomplete="current-password">
+    <button id="login-btn">Unlock Manual</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ MAIN PAGE ══════════════════════════ -->
+<div id="page">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-logo">
+      <div class="title">🌌 Telluric Pipeline</div>
+      <div class="sub">NIRPS &amp; SPIRou</div>
+    </div>
+    <nav id="nav">
+      <div class="section-label">Getting Started</div>
+      <a href="#overview">🗺 Overview</a>
+      <a href="#quickstart">⚡ Quick Start</a>
+      <a href="#config">⚙️ Configuration</a>
+      <a href="#filesystem">📁 File System</a>
+
+      <div class="section-label">Pipeline Steps</div>
+      <a href="#step-sync">1 — Sync Data</a>
+      <a href="#step-slinky">2 — Slinky</a>
+      <a href="#step-hotstar">3 — Hot Star Fit</a>
+      <a href="#step-compilstats">4 — Compile Stats</a>
+      <a href="#step-residuals">5 — Residuals</a>
+      <a href="#step-telluric">6 — Telluric Correction</a>
+
+      <div class="section-label">Tools</div>
+      <a href="#reset">🗑 Reset</a>
+      <a href="#run-pipeline">▶ run_pipeline.py</a>
+      <a href="#molecules">💧 Molecules</a>
+      <a href="#machines">🖥 Machines</a>
+      <a href="#troubleshoot">🔧 Troubleshooting</a>
+    </nav>
+  </aside>
+
+  <!-- Content -->
+  <main id="content">
+
+    <!-- ── OVERVIEW ── -->
+    <section id="overview">
+      <div class="hero">
+        <span class="badge">v28Apr2026</span>
+        <h1>Telluric Correction Pipeline</h1>
+        <p>A six-step pipeline for correcting telluric absorption in NIRPS and SPIRou infrared échelle spectra — from raw data sync through fully corrected science output.</p>
+      </div>
+
+      <p>The pipeline combines TAPAS-based atmospheric modelling with empirical per-pixel residual corrections to achieve high-fidelity telluric removal for precision radial-velocity work and spectral characterisation.</p>
+
+      <h3>Pipeline at a glance</h3>
+      <div class="flow">
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+          <div class="flow-body">
+            <div class="cmd">bash sync_NIRPS</div>
+            <div class="desc"><strong>Step 1 — Sync</strong> · rsync calibrations, hot-stars and science data from the remote server</div>
+            <div class="out">→ calib_NIRPS/ &nbsp;·&nbsp; hotstars_NIRPS/ &nbsp;·&nbsp; scidata_NIRPS/</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+          <div class="flow-body">
+            <div class="cmd">python slinky_tools.py</div>
+            <div class="desc"><strong>Step 2 — Slinky</strong> · correct FP cavity drift in wavelength solutions</div>
+            <div class="out">→ calib_NIRPS_patched/ &nbsp;·&nbsp; slinky_NIRPS_output/</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+          <div class="flow-body">
+            <div class="cmd">python smart_fit.py</div>
+            <div class="desc"><strong>Step 3 — Hot Star Fit</strong> · fit H₂O, CH₄, CO₂, O₂ exponents from hot-star spectra</div>
+            <div class="out">→ tellu_fit_NIRPS/trans_*.fits</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+          <div class="flow-body">
+            <div class="cmd">python compil_stats.py</div>
+            <div class="desc"><strong>Step 4 — Compile Stats</strong> · aggregate statistics, fit seasonal/secular models</div>
+            <div class="out">→ params_fit_tellu_NIRPS.csv &nbsp;·&nbsp; main_absorber_NIRPS.fits</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div><div class="flow-line"></div></div>
+          <div class="flow-body">
+            <div class="cmd">python residuals.py</div>
+            <div class="desc"><strong>Step 5 — Residuals</strong> · build per-pixel empirical correction maps from hot-star residuals</div>
+            <div class="out">→ residuals_NIRPS/residuals_order_XX_*.fits</div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-connector"><div class="flow-dot"></div></div>
+          <div class="flow-body">
+            <div class="cmd">python predict_abso.py</div>
+            <div class="desc"><strong>Step 6 — Telluric Correction</strong> · apply model + residual correction to all science targets</div>
+            <div class="out">→ tellupatched_NIRPS/{OBJ}_{batch}/</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="callout info">
+        <strong>One-command run:</strong> <code>python run_pipeline.py</code> executes all six steps in order. Read the <a href="#run-pipeline">run_pipeline.py section</a> for flags.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── QUICK START ── -->
+    <section id="quickstart">
+      <h2>⚡ Quick Start</h2>
+
+      <h3>Prerequisites</h3>
+      <ul>
+        <li>Conda environment <code>p3.12</code> (or equivalent) with astropy, scipy, numpy, tqdm, numexpr, yaml, matplotlib</li>
+        <li>Access to the remote data server (rali or equivalent) via SSH</li>
+        <li><code>telluric_config.yaml</code> configured for your machine (see <a href="#machines">Machines</a>)</li>
+      </ul>
+
+      <h3>First run (full pipeline)</h3>
+<pre><code><span class="cmt"># Activate environment</span>
+conda activate p3.12
+<span class="cmt"># Run all 6 steps</span>
+python run_pipeline.py</code></pre>
+
+      <h3>Typical partial runs</h3>
+<pre><code><span class="cmt"># Skip sync (data already present locally)</span>
+python run_pipeline.py --skip-sync
+
+<span class="cmt"># Re-run only the telluric correction on one object</span>
+python run_pipeline.py --only-telluric --object PROXIMA
+
+<span class="cmt"># Run only slinky (wavelength solution update)</span>
+python run_pipeline.py --only-slinky
+
+<span class="cmt"># Process a single object end-to-end (skip sync + slinky)</span>
+python run_pipeline.py --skip-sync --skip-slinky --object TOI270
+
+<span class="cmt"># Use SPIRou instead of NIRPS</span>
+python run_pipeline.py --instrument SPIROU</code></pre>
+
+      <h3>Reset for a clean re-reduction</h3>
+<pre><code><span class="cmt"># Dry run — shows what will be deleted, nothing is removed</span>
+python reset.py --dry-run
+
+<span class="cmt"># Actually delete all pipeline byproducts</span>
+python reset.py
+
+<span class="cmt"># Skip confirmation prompt (e.g., for scripting)</span>
+python reset.py --force</code></pre>
+
+      <div class="callout warn">
+        <strong>Warning:</strong> <code>reset.py</code> permanently deletes all computed products (fitted transmissions, residual maps, corrected spectra, etc.). Input data in <code>scidata_*/</code>, <code>hotstars_*/</code>, <code>calib_*/</code> and <code>templates_*/</code> are <em>never</em> touched.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── CONFIG ── -->
+    <section id="config">
+      <h2>⚙️ Configuration — <code>telluric_config.yaml</code></h2>
+      <p>All pipeline behaviour is controlled by a single YAML file. The most commonly edited sections are described below.</p>
+
+      <h3>Top-level instrument settings</h3>
+      <table>
+        <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>instrument</code></td><td><code>NIRPS</code></td><td><code>NIRPS</code> or <code>SPIROU</code> — determines all derived directory names and calibration files.</td></tr>
+        <tr><td><code>template_style</code></td><td><code>smart</code></td><td><code>model</code> uses a synthetic stellar model; <code>self</code> uses a median of the target's own spectra; <code>smart</code> auto-selects self if a template already exists, otherwise model.</td></tr>
+      </table>
+
+      <h3>Target lists</h3>
+      <table>
+        <tr><th>Key</th><th>Description</th></tr>
+        <tr><td><code>hot_stars</code></td><td>List of hot-star names used by <code>smart_fit.py</code> and <code>compil_stats.py</code>. Add one name per line. Names must match filenames in <code>hotstars_NIRPS/</code>.</td></tr>
+        <tr><td><code>science_targets</code></td><td>List of science targets processed by <code>predict_abso.py</code> (and patched by slinky). Each name must match a sub-directory in <code>scidata_NIRPS/</code>.</td></tr>
+      </table>
+
+      <h3>Batch settings</h3>
+<pre><code>batch:
+  name: <span class="str">'v28Apr2026'</span>     <span class="cmt"># Batch identifier — appears in output folder names</span>
+  generate_plots: <span class="kw">true</span>
+  plot_orders: [30, 60]    <span class="cmt"># Order range for diagnostic PDFs</span></code></pre>
+
+      <div class="callout tip">
+        <strong>Tip:</strong> Change <code>batch.name</code> to version your outputs. Each batch produces its own <code>tellupatched_NIRPS/{OBJ}_{batch}/</code> sub-directory, so multiple batches can coexist.
+      </div>
+
+      <h3>Processing parameters</h3>
+      <table>
+        <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>processing.randomize_files</code></td><td><code>true</code></td><td>Shuffle file order; helps with parallel execution.</td></tr>
+        <tr><td><code>processing.lowpass_filter_size</code></td><td><code>101</code></td><td>Low-pass filter window (pixels) for continuum normalisation.</td></tr>
+        <tr><td><code>processing.hotstar_medfilt_width</code></td><td><code>150</code> km/s</td><td>Running-median width (km/s) for hot-star continuum.</td></tr>
+        <tr><td><code>processing.dv_amp</code></td><td><code>200</code> km/s</td><td>Velocity search range for RV estimation.</td></tr>
+        <tr><td><code>processing.sky_rejection_threshold</code></td><td><code>1.0</code></td><td>Reject pixels where sky/sp_corr exceeds this value.</td></tr>
+      </table>
+
+      <h3>Quality control thresholds</h3>
+      <table>
+        <tr><th>Key</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>quality_control.o2_airm_min</code></td><td><code>0.92</code></td><td>Minimum valid O₂ airmass. Below this → twilight fluorescence contamination.</td></tr>
+        <tr><td><code>quality_control.o2_airm_max</code></td><td><code>1.08</code></td><td>Maximum valid O₂ airmass.</td></tr>
+        <tr><td><code>quality_control.rms_excess_factor</code></td><td><code>2.0</code></td><td>Pixels with RMS &gt; factor × smoothed envelope are set to NaN. Minimum allowed: 1.5.</td></tr>
+      </table>
+
+      <h3>Per-molecule depth thresholds</h3>
+      <table>
+        <tr><th>Molecule</th><th>depth_max</th><th>depth_saturated</th><th>reject_saturated</th></tr>
+        <tr><td>H₂O</td><td>0.6</td><td>0.5</td><td>0.8</td></tr>
+        <tr><td>CH₄</td><td>0.5</td><td>0.2</td><td>0.8</td></tr>
+        <tr><td>CO₂</td><td>0.5</td><td>0.2</td><td>0.8</td></tr>
+        <tr><td>O₂</td><td>0.8</td><td>0.2</td><td>0.9</td></tr>
+      </table>
+      <p style="color:var(--muted);font-size:0.85rem">Pixels below <strong>depth_max</strong> transmission are down-weighted. Pixels below <strong>depth_saturated</strong> contaminate neighbours out to <strong>reject_saturated</strong> via the sigmoid-weight transition (<code>weighting.transition_sigma</code>).</p>
+    </section>
+
+    <hr>
+
+    <!-- ── FILE SYSTEM ── -->
+    <section id="filesystem">
+      <h2>📁 File System Layout</h2>
+      <p>All directories live under <code>project_path</code> (machine-specific, see <a href="#machines">Machines</a>).</p>
+
+      <div class="filetree">
+        <span class="dir">project_path/</span><br>
+        &nbsp;&nbsp;<span class="dir">calib_NIRPS/</span>             <span class="muted"># Raw calibrations (waveref, blaze, FP/HC linelists) — INPUT</span><br>
+        &nbsp;&nbsp;<span class="dir">calib_NIRPS_patched/</span>     <span class="muted"># Slinky-corrected wavelength solutions — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">hotstars_NIRPS/</span>          <span class="muted"># Hot-star e2dsff spectra — INPUT</span><br>
+        &nbsp;&nbsp;<span class="dir">scidata_NIRPS/</span>           <span class="muted"># Science spectra, one sub-dir per object — INPUT</span><br>
+        &nbsp;&nbsp;<span class="dir">sky_NIRPS/</span>               <span class="muted"># Sky PCA components FITS — INPUT</span><br>
+        &nbsp;&nbsp;<span class="dir">templates_NIRPS/</span>         <span class="muted"># Stellar templates — INPUT or GENERATED</span><br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;<span class="dir">tellu_fit_NIRPS/</span>         <span class="muted"># Hot-star transmission fits + big_table.csv — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">residuals_NIRPS/</span>         <span class="muted"># Per-order residual maps (slope/intercept/rms) — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">tellupatched_NIRPS/</span>      <span class="muted"># Telluric-corrected science spectra — GENERATED</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span class="dir">PROXIMA_v28Apr2026/</span>  <span class="muted"># One sub-dir per object × batch</span><br>
+        &nbsp;&nbsp;<span class="dir">tmp_NIRPS/</span>               <span class="muted"># Precomputed absorption grid cache (.pkl) — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">slinky_NIRPS_output/</span>     <span class="muted"># Science files with corrected wave extension — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">slinky_NIRPS_plots/</span>      <span class="muted"># Slinky diagnostic plots — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="dir">paper_figures/</span>           <span class="muted"># Paper-quality PDFs (if enabled in config) — GENERATED</span><br>
+        &nbsp;&nbsp;<br>
+        &nbsp;&nbsp;<span class="file">params_fit_tellu_NIRPS.csv</span>  <span class="muted"># Fitted atm. parameters — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="file">main_absorber_NIRPS.fits</span>    <span class="muted"># Dominant-absorber map — GENERATED</span><br>
+        &nbsp;&nbsp;<span class="file">telluric_config.yaml</span>        <span class="muted"># Master configuration file</span><br>
+      </div>
+
+      <div class="callout info">
+        <strong>GENERATED vs INPUT:</strong> Directories marked GENERATED are safe to delete — <code>reset.py</code> removes them all. INPUT directories contain data synced from the server and should not be deleted without a re-sync.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 1 — SYNC ── -->
+    <section id="step-sync">
+      <h2><span class="step-badge">1</span>Sync Data</h2>
+
+      <h3>Commands</h3>
+<pre><code>bash sync_NIRPS
+bash sync_SPIROU   <span class="cmt"># for SPIRou</span></code></pre>
+      <p>Or via the pipeline driver (always runs first unless skipped):</p>
+<pre><code>python run_pipeline.py               <span class="cmt"># includes sync</span>
+python run_pipeline.py --skip-sync   <span class="cmt"># skip if data already present</span></code></pre>
+
+      <h3>What it does</h3>
+      <p>Uses <code>rsync</code> to copy required files from the remote server to your local <code>project_path</code>:</p>
+      <table>
+        <tr><th>Remote source</th><th>Local destination</th><th>Contents</th></tr>
+        <tr><td><code>calib/</code></td><td><code>calib_NIRPS/</code></td><td>waveref, blaze, FP/HC line lists, wavesol_ref</td></tr>
+        <tr><td><code>hotstars/</code></td><td><code>hotstars_NIRPS/</code></td><td>All <code>*_e2dsff_A.fits</code> for the <code>hot_stars</code> list</td></tr>
+        <tr><td><code>scidata/</code></td><td><code>scidata_NIRPS/</code></td><td>Science spectra, directory structure preserved</td></tr>
+        <tr><td><code>templates/</code></td><td><code>templates_NIRPS/</code></td><td>Stellar template FITS files</td></tr>
+        <tr><td><code>sky/</code></td><td><code>sky_NIRPS/</code></td><td>Sky PCA components</td></tr>
+      </table>
+
+      <div class="callout tip">
+        <strong>Adding a new target:</strong> Add the object name to <code>science_targets:</code> in <code>telluric_config.yaml</code> and re-run <code>bash sync_NIRPS</code>. The rsync will only download the new files.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 2 — SLINKY ── -->
+    <section id="step-slinky">
+      <h2><span class="step-badge">2</span>Slinky — Wavelength Solution Refinement</h2>
+
+      <h3>Command</h3>
+<pre><code>python slinky_tools.py
+<span class="cmt"># or via pipeline:</span>
+python run_pipeline.py --only-slinky</code></pre>
+
+      <h3>What it does</h3>
+      <p>FP-based wavelength calibrations drift due to Fabry-Perot cavity length variations (the "slinky" effect). This step measures and removes that drift by correlating FP and HC (hollow-cathode) line lists.</p>
+
+      <ol>
+        <li><strong>Match FP / HC line-list files</strong> by MJD from <code>calib_NIRPS/</code></li>
+        <li><strong>Compute cavity values</strong> for each HC line using FP peak numbers</li>
+        <li><strong>Fit zero-point and slope</strong> of cavity drift per epoch (iterative σ-clipping)</li>
+        <li><strong>Patch wavelength solutions</strong> with GP-smoothed per-line residuals (kernel length = <code>wslinky</code>)</li>
+        <li><strong>Replace wave extensions</strong> in all science and hot-star files</li>
+      </ol>
+
+      <h3>Configuration (<code>slinky:</code> section)</h3>
+      <table>
+        <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>doplot</code></td><td><code>false</code></td><td>Show interactive diagnostic plots during processing</td></tr>
+        <tr><td><code>wave_leverage</code></td><td><code>1600</code> nm</td><td>Leverage point for the linear cavity fit</td></tr>
+        <tr><td><code>wslinky</code></td><td><code>0.1</code> nm</td><td>Autocorrelation length of the GP smoothing kernel</td></tr>
+      </table>
+
+      <h3>Required inputs (in <code>calib_NIRPS/</code>)</h3>
+      <table>
+        <tr><th>Glob pattern</th><th>Content</th></tr>
+        <tr><td><code>*wave_fplines_A.fits</code></td><td>FP line-position tables (one per epoch)</td></tr>
+        <tr><td><code>*wave_hclines_A.fits</code></td><td>HC line-position tables (one per epoch)</td></tr>
+        <tr><td><code>*_wavesol_ref_A.fits</code></td><td>Reference wavelength solution</td></tr>
+        <tr><td><code>*waveref_hclines*A.fits</code></td><td>HC reference line list</td></tr>
+      </table>
+
+      <h3>Outputs</h3>
+      <table>
+        <tr><th>Directory</th><th>Contents</th></tr>
+        <tr><td><code>calib_NIRPS_patched/</code></td><td>Patched wavelength solution FITS files — used automatically by downstream steps</td></tr>
+        <tr><td><code>slinky_NIRPS_output/</code></td><td>Science files with corrected <code>WaveA</code> extension</td></tr>
+        <tr><td><code>slinky_NIRPS_plots/</code></td><td>Cavity median, zero-point/slope trends, HC/FP residual plots</td></tr>
+        <tr><td><code>calib_NIRPS/*_slinky.fits</code></td><td>Per-HC-frame augmented line-list (deleted by <code>reset.py</code>)</td></tr>
+      </table>
+
+      <div class="callout info">
+        Steps 3–6 automatically prefer wave solutions from <code>calib_NIRPS_patched/</code> when available; if slinky has not been run they fall back to <code>calib_NIRPS/</code>.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 3 — HOT STAR ── -->
+    <section id="step-hotstar">
+      <h2><span class="step-badge">3</span>Hot Star Telluric Fitting</h2>
+
+      <h3>Command</h3>
+<pre><code>python smart_fit.py</code></pre>
+
+      <h3>What it does</h3>
+      <p>Processes all hot-star spectra listed in <code>hot_stars:</code> to determine the atmospheric transmission function. Hot stars have featureless IR spectra, making them ideal telluric calibrators.</p>
+
+      <ol>
+        <li>Load reference wavelength grid, blaze function, and sky PCA components</li>
+        <li>For each hot-star spectrum: resample → normalise → subtract sky (OH airglow via PCA) → divide by blaze</li>
+        <li>Optimise absorption exponents one molecule at a time, starting from airmass as an initial guess</li>
+        <li>Write corrected transmission and updated FITS header</li>
+      </ol>
+
+      <h3>Molecules fitted</h3>
+      <table>
+        <tr><th>Molecule</th><th>Header key</th><th>Physical meaning</th></tr>
+        <tr><td>H₂O</td><td><code>EXPO_H2O</code></td><td>Column water vapour; highly variable</td></tr>
+        <tr><td>CH₄</td><td><code>EXPO_CH4</code></td><td>Methane; seasonal variation</td></tr>
+        <tr><td>CO₂</td><td><code>EXPO_CO2</code></td><td>CO₂; secular increase + annual cycle</td></tr>
+        <tr><td>O₂</td><td><code>EXPO_O2</code></td><td>Oxygen A-band; constant mixing ratio</td></tr>
+      </table>
+
+      <h3>Output</h3>
+      <p><code>tellu_fit_NIRPS/trans_*.fits</code> — one file per hot-star observation, containing the fitted transmission spectrum and all derived header keywords.</p>
+
+      <h3>Example console output</h3>
+<pre><code>11:39:30 | *** HD195094 [1/10] ***
+11:39:39 | Starting exponent optimisation for [H2O, CH4, CO2, O2]...
+11:39:40 | Optimised expo for H2O: <span class="num">0.6560</span>
+          Optimised expo for CH4: <span class="num">1.0150</span>
+          Optimised expo for CO2: <span class="num">1.0088</span>
+          Optimised expo for O2:  <span class="num">0.9967</span>
+          Airmass used: <span class="num">1.034</span></code></pre>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 4 — COMPIL STATS ── -->
+    <section id="step-compilstats">
+      <h2><span class="step-badge">4</span>Compile Statistics</h2>
+
+      <h3>Command</h3>
+<pre><code>python compil_stats.py</code></pre>
+
+      <h3>What it does</h3>
+      <p>Aggregates telluric parameters from all <code>trans_*.fits</code> headers to build statistical models used by <code>predict_abso.py</code>.</p>
+
+      <ol>
+        <li><strong>Build big table</strong> — reads all FITS headers from <code>tellu_fit_NIRPS/</code>; cached in <code>big_table.csv</code> for fast re-runs</li>
+        <li><strong>QC filtering</strong> — discards exposures outside <code>o2_airm_min</code> / <code>o2_airm_max</code> (twilight fluorescence)</li>
+        <li><strong>Fit temporal models</strong> for CO₂ (secular + annual cycle), CH₄ (seasonal), O₂ (airmass-only)</li>
+        <li><strong>Identify dominant absorber</strong> per pixel → <code>main_absorber_NIRPS.fits</code></li>
+        <li><strong>Write parameter CSV</strong> → <code>params_fit_tellu_NIRPS.csv</code></li>
+      </ol>
+
+      <h3>Physical models</h3>
+      <table>
+        <tr><th>Molecule</th><th>Model</th><th>Reason</th></tr>
+        <tr><td>CO₂</td><td>Secular trend + annual sinusoid</td><td>~2 ppm/yr increase; Northern-Hemisphere biosphere cycle</td></tr>
+        <tr><td>CH₄</td><td>Seasonal sinusoid</td><td>Biosphere + anthropogenic sources</td></tr>
+        <tr><td>O₂</td><td>Airmass scaling only</td><td>Constant 20.95% mixing ratio</td></tr>
+        <tr><td>H₂O</td><td>Fitted per-observation</td><td>Too variable for a statistical model</td></tr>
+      </table>
+
+      <h3>Outputs</h3>
+      <table>
+        <tr><th>File</th><th>Description</th></tr>
+        <tr><td><code>params_fit_tellu_NIRPS.csv</code></td><td>Fitted atmospheric model parameters consumed by <code>predict_abso.py</code></td></tr>
+        <tr><td><code>main_absorber_NIRPS.fits</code></td><td>Integer map (0=H₂O, 1=CO₂, 2=CH₄, 3=O₂) of the dominant absorber per pixel</td></tr>
+        <tr><td><code>tellu_fit_NIRPS/big_table.csv</code></td><td>Cached master table of all hot-star headers (regenerated when stale)</td></tr>
+      </table>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 5 — RESIDUALS ── -->
+    <section id="step-residuals">
+      <h2><span class="step-badge">5</span>Residual Modelling</h2>
+
+      <h3>Command</h3>
+<pre><code>python residuals.py</code></pre>
+
+      <h3>What it does</h3>
+      <p>Builds per-pixel empirical correction maps from the ensemble of hot-star residuals. These capture systematic errors not modelled by TAPAS (line position shifts, depth biases, instrumental artefacts).</p>
+
+      <ol>
+        <li>Load all <code>trans_*.fits</code> from <code>tellu_fit_NIRPS/</code></li>
+        <li>BERV-align residuals to a common wavelength grid</li>
+        <li>Per-pixel linear fit: slope vs <code>EXPO_H2O</code> (for water pixels) or vs <code>AIRMASS</code> (for O₂/CO₂/CH₄)</li>
+        <li>Compute RMS after model subtraction</li>
+        <li>Build a smoothed RMS envelope (median filter + Savitzky-Golay)</li>
+      </ol>
+
+      <h3>Quality filters applied</h3>
+      <ul>
+        <li>Only hot stars with <code>EXPO_H2O</code> &lt; 7.0</li>
+        <li>Require &gt; 50% valid pixels per order for the fit</li>
+        <li>Pixels with RMS &gt; <code>rms_excess_factor</code> × envelope are masked (set to NaN) in subsequent steps</li>
+      </ul>
+
+      <h3>Outputs (<code>residuals_NIRPS/</code>)</h3>
+      <table>
+        <tr><th>File pattern</th><th>Description</th></tr>
+        <tr><td><code>residuals_order_XX_slope.fits</code></td><td>Slope of the linear correction (per pixel)</td></tr>
+        <tr><td><code>residuals_order_XX_intercept.fits</code></td><td>Intercept of the linear correction</td></tr>
+        <tr><td><code>residuals_order_XX_rms.fits</code></td><td>RMS after correction (quality metric)</td></tr>
+        <tr><td><code>residuals_order_XX_rms_envelope.fits</code></td><td>Smoothed RMS envelope (masking threshold)</td></tr>
+      </table>
+
+      <div class="callout warn">
+        <strong>This step is optional</strong> but recommended. If <code>residuals_NIRPS/</code> is absent, <code>predict_abso.py</code> still runs but skips the per-pixel empirical correction, leaving systematic residuals in the output.
+      </div>
+    </section>
+
+    <hr>
+
+    <!-- ── STEP 6 — TELLURIC CORRECTION ── -->
+    <section id="step-telluric">
+      <h2><span class="step-badge">6</span>Telluric Correction — <code>predict_abso.py</code></h2>
+
+      <h3>Commands</h3>
+<pre><code><span class="cmt"># All science_targets from config (default)</span>
+python predict_abso.py
+
+<span class="cmt"># Single object</span>
+python predict_abso.py --object PROXIMA
+
+<span class="cmt"># Via pipeline driver</span>
+python run_pipeline.py --only-telluric
+python run_pipeline.py --only-telluric --object TOI270</code></pre>
+
+      <h3>What it does</h3>
+      <p>Applies the full telluric correction to science targets using the models from steps 3–5.</p>
+
+      <ol>
+        <li>Load per-exposure wavelength grid, spectrum, airmass, pressure</li>
+        <li>Load or generate stellar template (<code>model</code> / <code>self</code> / <code>smart</code>)</li>
+        <li>Estimate radial velocity via cross-correlation (search range ±<code>dv_amp</code> km/s)</li>
+        <li>Build TAPAS atmospheric transmission at observation conditions using parameters from <code>params_fit_tellu_NIRPS.csv</code></li>
+        <li>Subtract sky emission via PCA</li>
+        <li>Apply per-pixel residual correction from <code>residuals_NIRPS/</code></li>
+        <li>Mask saturated telluric pixels (NaN) based on depth thresholds</li>
+        <li>Write <code>*tellupatched_t.fits</code> output file</li>
+      </ol>
+
+      <h3>Template styles</h3>
+      <table>
+        <tr><th>Style</th><th>Behaviour</th><th>When to use</th></tr>
+        <tr><td><code>model</code></td><td>Use a synthetic stellar model from the library</td><td>First run; few observed epochs</td></tr>
+        <tr><td><code>self</code></td><td>Build template from median of the target's own corrected spectra</td><td>Many epochs available; iterative refinement</td></tr>
+        <tr><td><code>smart</code></td><td>Use <code>self</code> if <code>templates_NIRPS/Template_s1dv_{obj}_*.fits</code> exists, else <code>model</code></td><td><strong>Recommended default</strong></td></tr>
+      </table>
+
+      <h3>Output</h3>
+      <p>Corrected spectra are written to <code>tellupatched_NIRPS/{OBJ}_{batchname}/</code>. File names follow the pattern:</p>
+<pre><code>*tellupatched_t.fits   <span class="cmt"># telluric-corrected 2D e2dsff spectrum</span></code></pre>
+
+      <h3>Per-object progress tracking</h3>
+      <p>The script skips files for which the output <code>tellupatched_t.fits</code> already exists in the batch directory, enabling safe interruption and restart.</p>
+    </section>
+
+    <hr>
+
+    <!-- ── RESET ── -->
+    <section id="reset">
+      <h2>🗑 Reset — <code>reset.py</code></h2>
+      <p>Removes all pipeline byproducts for a clean re-reduction. Input data directories are never touched.</p>
+
+      <h3>Usage</h3>
+<pre><code>python reset.py              <span class="cmt"># interactive — shows plan, asks confirmation</span>
+python reset.py --dry-run    <span class="cmt"># show what would be deleted, delete nothing</span>
+python reset.py --force      <span class="cmt"># skip confirmation (for scripts)</span>
+python reset.py --instrument SPIROU   <span class="cmt"># override instrument</span></code></pre>
+
+      <h3>What gets deleted</h3>
+      <table>
+        <tr><th>Type</th><th>Path</th></tr>
+        <tr><td>Dir</td><td><code>tellu_fit_{instrument}/</code></td></tr>
+        <tr><td>Dir</td><td><code>residuals_{instrument}/</code></td></tr>
+        <tr><td>Dir</td><td><code>tellupatched_{instrument}/</code></td></tr>
+        <tr><td>Dir</td><td><code>tmp_{instrument}/</code> (absorption grid cache)</td></tr>
+        <tr><td>Dir</td><td><code>slinky_{instrument}_output/</code></td></tr>
+        <tr><td>Dir</td><td><code>slinky_{instrument}_plots/</code></td></tr>
+        <tr><td>Dir</td><td><code>calib_{instrument}_patched/</code></td></tr>
+        <tr><td>Dir</td><td><code>paper_figures/</code> (if configured)</td></tr>
+        <tr><td>File</td><td><code>params_fit_tellu_{instrument}.csv</code></td></tr>
+        <tr><td>File</td><td><code>main_absorber_{instrument}.fits</code></td></tr>
+        <tr><td>Files</td><td><code>calib_{instrument}/*_slinky.fits</code></td></tr>
+      </table>
+    </section>
+
+    <hr>
+
+    <!-- ── RUN PIPELINE ── -->
+    <section id="run-pipeline">
+      <h2>▶ <code>run_pipeline.py</code> — Full Pipeline Driver</h2>
+      <p>The top-level driver that chains all six steps. Reads defaults from <code>telluric_config.yaml</code>.</p>
+
+      <h3>All flags</h3>
+<pre><code>python run_pipeline.py [FLAGS]
+
+<span class="cmt">## Step control</span>
+  <span class="flag">--skip-sync</span>        Skip rsync step
+  <span class="flag">--skip-slinky</span>      Skip slinky wavelength correction
+  <span class="flag">--skip-residuals</span>   Skip residual modelling
+  <span class="flag">--skip-telluric</span>    Skip telluric correction
+  <span class="flag">--only-slinky</span>      Run slinky step only (implies --skip-* for others)
+  <span class="flag">--only-telluric</span>    Run telluric step only
+
+<span class="cmt">## Target / instrument</span>
+  <span class="flag">--instrument</span> NIRPS|SPIROU  Override instrument (default: from config)
+  <span class="flag">--object</span> NAME               Process a single object
+  <span class="flag">--batch</span>  NAME               Override batch name
+
+<span class="cmt">## Template</span>
+  <span class="flag">--template</span> model|self|smart  Override template style
+
+<span class="cmt">## Misc</span>
+  <span class="flag">--recompute</span>        Force recomputation of the absorption grid cache</code></pre>
+    </section>
+
+    <hr>
+
+    <!-- ── MOLECULES ── -->
+    <section id="molecules">
+      <h2>💧 Atmospheric Molecules</h2>
+      <p>The pipeline models four atmospheric absorbers using TAPAS-computed opacity grids.</p>
+
+      <table>
+        <tr><th>Molecule</th><th>Symbol</th><th>Spectral region</th><th>Variability</th></tr>
+        <tr><td>Water vapour</td><td>H₂O</td><td>All NIR orders</td><td>High — fitted per-observation</td></tr>
+        <tr><td>Carbon dioxide</td><td>CO₂</td><td>1.6 µm, 2.0 µm</td><td>Secular + annual cycle (~2 ppm/yr)</td></tr>
+        <tr><td>Methane</td><td>CH₄</td><td>1.7 µm, 2.3 µm</td><td>Seasonal + anthropogenic trend</td></tr>
+        <tr><td>Oxygen</td><td>O₂</td><td>0.76 µm (A-band)</td><td>Fixed mixing ratio (20.95%)</td></tr>
+      </table>
+
+      <h3>Absorption model</h3>
+      <p>Each molecule's transmission is modelled as:</p>
+      <p style="text-align:center;font-family:monospace;padding:12px;background:var(--code-bg);border:1px solid var(--border);border-radius:8px;margin:12px 0">
+        T(λ) = T_TAPAS(λ)^exponent
+      </p>
+      <p>where <code>exponent ≈ airmass × (column_density / reference_density)</code>. The exponent is optimised independently for each molecule and each exposure during Step 3.</p>
+
+      <h3>O₂ quality control</h3>
+      <p>Twilight observations contaminate O₂ measurements via OH Meinel band fluorescence. Exposures with <code>O2_AIRM</code> outside [<code>o2_airm_min</code>, <code>o2_airm_max</code>] are excluded from the statistical fit in Step 4.</p>
+    </section>
+
+    <hr>
+
+    <!-- ── MACHINES ── -->
+    <section id="machines">
+      <h2>🖥 Machine Configuration</h2>
+      <p>The pipeline auto-detects which machine it is running on by checking for a sentinel file (<code>detect_path</code>). The first matching machine configuration is used.</p>
+
+      <h3>Current machines in config</h3>
+      <table>
+        <tr><th>Machine</th><th>detect_path</th><th>project_path</th><th>n_cores</th></tr>
+        <tr><td>FIR (Compute Canada)</td><td><code>/home/eartigau/.fir_token</code></td><td><code>/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit</code></td><td>8</td></tr>
+        <tr><td>MacBook-eartigau</td><td><code>/Users/eartigau/telluric_fit</code></td><td><code>/Users/eartigau/telluric_fit</code></td><td>1</td></tr>
+      </table>
+
+      <h3>Adding a new machine</h3>
+<pre><code>machines:
+  MyNewMachine:
+    detect_path: <span class="str">'/path/to/sentinel_file'</span>
+    project_path: <span class="str">'/path/to/working/directory'</span>
+    doplot: <span class="kw">false</span>
+    n_cores: <span class="num">4</span></code></pre>
+      <p>Create the sentinel file (<code>touch /path/to/sentinel_file</code>) and the machine will be detected automatically. No other changes are needed.</p>
+
+      <h3>Compute Canada specifics</h3>
+      <p>If you encounter a <code>libcpupower.so.0: cannot open shared object file</code> error when importing NumPy:</p>
+<pre><code><span class="cmt"># Quick fix</span>
+export LD_LIBRARY_PATH="/cvmfs/soft.computecanada.ca/gentoo/2023/x86-64-v3/usr/lib64:$LD_LIBRARY_PATH"
+
+<span class="cmt"># Permanent fix via provided script</span>
+chmod +x setup_env.sh
+source setup_env.sh</code></pre>
+      <p>The FIR machine configuration in <code>telluric_config.yaml</code> sets <code>library_path</code> which <code>run_cluster.sh</code> exports automatically.</p>
+    </section>
+
+    <hr>
+
+    <!-- ── TROUBLESHOOTING ── -->
+    <section id="troubleshoot">
+      <h2>🔧 Troubleshooting</h2>
+
+      <h3>Console output colour codes</h3>
+      <table>
+        <tr><th>Colour</th><th>Meaning</th></tr>
+        <tr><td><span class="color-dot" style="background:#4ade80"></span><strong style="color:#4ade80">Green</strong></td><td>Progress messages — what the pipeline is doing</td></tr>
+        <tr><td><span class="color-dot" style="background:#38bdf8"></span><strong style="color:#38bdf8">Blue</strong></td><td>Numerical values and derived parameters</td></tr>
+        <tr><td><span class="color-dot" style="background:#67e8f9"></span><strong style="color:#67e8f9">Cyan</strong></td><td>Hot-star banners with progress [n/N]</td></tr>
+        <tr><td><span class="color-dot" style="background:#fb923c"></span><strong style="color:#fb923c">Orange</strong></td><td>Warnings — issues requiring attention</td></tr>
+        <tr><td><span class="color-dot" style="background:#f87171"></span><strong style="color:#f87171">Red</strong></td><td>Errors</td></tr>
+      </table>
+
+      <h3>Common problems</h3>
+
+      <h4>Missing calibration files</h4>
+      <p>Re-run <code>bash sync_NIRPS</code>. Check SSH connectivity to the remote server.</p>
+
+      <h4>Exponent optimisation does not converge</h4>
+      <ul>
+        <li>Verify hot-star spectrum quality (check SNR in header)</li>
+        <li>Confirm sky subtraction worked (check sky PCA components file exists)</li>
+        <li>Review airmass values — extreme airmasses (&gt; 2.5) can cause problems</li>
+      </ul>
+
+      <h4><code>FileNotFoundError: templates_NIRPS/Template_s1dv_…</code></h4>
+      <p>The template for this object is missing. Either:</p>
+      <ul>
+        <li>Run with <code>--template model</code> to use a synthetic model instead, or</li>
+        <li>Re-run the sync to download the template from the server</li>
+      </ul>
+
+      <h4>Science correction produces NaN-filled spectra</h4>
+      <ul>
+        <li>Reduce <code>rms_excess_factor</code> slightly (e.g. 2.5 → 2.0) — but stay ≥ 1.5</li>
+        <li>Check that <code>residuals_NIRPS/</code> exists and has all order files</li>
+        <li>Verify template RV is within the <code>dv_amp</code> search range</li>
+      </ul>
+
+      <h4>Output spectra exist but are not updated after config change</h4>
+      <p><code>predict_abso.py</code> skips files that already have an output. Delete the relevant sub-directory in <code>tellupatched_NIRPS/</code>, or use a new batch name, then re-run.</p>
+
+      <h4>Pipeline very slow on a single core</h4>
+      <p>On multi-core machines, increase <code>n_cores</code> in the machine configuration or run individual objects in parallel:</p>
+<pre><code><span class="cmt"># Run two objects in parallel in separate terminals</span>
+python predict_abso.py --object PROXIMA &amp;
+python predict_abso.py --object TOI270 &amp;</code></pre>
+    </section>
+
+    <p style="color:var(--muted);font-size:0.8rem;margin-top:48px;padding-top:16px;border-top:1px solid var(--border)">
+      Telluric Correction Pipeline · NIRPS &amp; SPIRou · 2026
+    </p>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════ SCRIPTS ══════════════════════════ -->
+<script>
+  // SHA-256 of the password — computed via: python3 -c "import hashlib; print(hashlib.sha256(b'nirps4ever').hexdigest())"
+  const PASSWORD_SHA256 = '67d9abde917fce2250c8003f7866e55053c0db45860c0b94b3baabfe427ea85c';
+
+  // ── Login logic ──
+  async function sha256hex(str) {
+    const buf  = new TextEncoder().encode(str);
+    const hash = await crypto.subtle.digest('SHA-256', buf);
+    return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  async function tryLogin() {
+    const pw  = document.getElementById('pw-input').value;
+    const err = document.getElementById('login-error');
+    if (!pw) { err.textContent = 'Please enter a password.'; return; }
+
+    const hash = await sha256hex(pw);
+    if (hash === PASSWORD_SHA256) {
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('page').classList.add('visible');
+      // Trigger active-nav highlight after page is visible
+      updateActiveNav();
+    } else {
+      err.textContent = 'Incorrect password.';
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-input').focus();
+    }
+  }
+
+  document.getElementById('login-btn').addEventListener('click', tryLogin);
+  document.getElementById('pw-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') tryLogin();
+  });
+
+  // ── Active nav highlight ──
+  function updateActiveNav() {
+    const sections = document.querySelectorAll('section[id]');
+    const links    = document.querySelectorAll('nav a');
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          links.forEach(l => l.classList.remove('active'));
+          const active = document.querySelector(`nav a[href="#${e.target.id}"]`);
+          if (active) active.classList.add('active');
+        }
+      });
+    }, { threshold: 0.25 });
+    sections.forEach(s => observer.observe(s));
+  }
+</script>
+
+</body>
+</html>
