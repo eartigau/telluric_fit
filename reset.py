@@ -87,39 +87,13 @@ def _collect_targets(project_path, instrument, paper_figures_dir):
     return dirs, files
 
 
-def _fmt_size(path):
-    """Return a human-readable size string for a file or directory."""
-    try:
-        if os.path.isdir(path):
-            total = sum(
-                os.path.getsize(os.path.join(dp, f))
-                for dp, _, fnames in os.walk(path)
-                for f in fnames
-            )
-        else:
-            total = os.path.getsize(path)
-    except OSError:
-        return '?'
-    for unit in ('B', 'KB', 'MB', 'GB'):
-        if total < 1024:
-            return f'{total:.0f} {unit}'
-        total /= 1024
-    return f'{total:.1f} TB'
-
-
-def _print_plan(dirs, files, show_sizes=True):
+def _print_plan(dirs, files):
     """Print what will be deleted."""
     any_found = False
-
-    def _size_suffix(path):
-        if not show_sizes:
-            return ''
-        return f'  ({_fmt_size(path)})'
-
     print('\nDirectories to delete:')
     for d in dirs:
         if os.path.exists(d):
-            print(f'  [DIR]  {d}{_size_suffix(d)}')
+            print(f'  [DIR]  {d}')
             any_found = True
         else:
             print(f'  [---]  {d}  (not found)')
@@ -127,7 +101,7 @@ def _print_plan(dirs, files, show_sizes=True):
     print('\nFiles to delete:')
     for f in files:
         if os.path.exists(f):
-            print(f'  [FILE] {f}{_size_suffix(f)}')
+            print(f'  [FILE] {f}')
             any_found = True
         else:
             print(f'  [---]  {f}  (not found)')
@@ -185,7 +159,7 @@ def main():
         print('Mode         : DRY RUN (nothing will be deleted)')
 
     dirs, files = _collect_targets(project_path, instrument, paper_figures_dir)
-    any_found = _print_plan(dirs, files, show_sizes=not args.dry_run)
+    any_found = _print_plan(dirs, files)
 
     if not any_found:
         print('Nothing to remove — workspace is already clean.')
