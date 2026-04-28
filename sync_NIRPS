@@ -80,7 +80,7 @@ find "$SRC_CALIB" -maxdepth 2 -type f \( \
   -name '*wavesol_ref_A.fits' -o \
   -name '*waveref_hclines*A.fits' -o \
   -name '*_e2dsff_A_wave_night_A.fits' \
-\) -exec cp -uv {} "$DST_CALIB/" \;
+\) -exec cp -u {} "$DST_CALIB/" \;
 echo "[1/3] Calibrations OK -> $DST_CALIB"
 echo ""
 
