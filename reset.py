@@ -107,13 +107,19 @@ def _fmt_size(path):
     return f'{total:.1f} TB'
 
 
-def _print_plan(dirs, files):
+def _print_plan(dirs, files, show_sizes=True):
     """Print what will be deleted."""
     any_found = False
+
+    def _size_suffix(path):
+        if not show_sizes:
+            return ''
+        return f'  ({_fmt_size(path)})'
+
     print('\nDirectories to delete:')
     for d in dirs:
         if os.path.exists(d):
-            print(f'  [DIR]  {d}  ({_fmt_size(d)})')
+            print(f'  [DIR]  {d}{_size_suffix(d)}')
             any_found = True
         else:
             print(f'  [---]  {d}  (not found)')
@@ -121,7 +127,7 @@ def _print_plan(dirs, files):
     print('\nFiles to delete:')
     for f in files:
         if os.path.exists(f):
-            print(f'  [FILE] {f}  ({_fmt_size(f)})')
+            print(f'  [FILE] {f}{_size_suffix(f)}')
             any_found = True
         else:
             print(f'  [---]  {f}  (not found)')
@@ -179,7 +185,7 @@ def main():
         print('Mode         : DRY RUN (nothing will be deleted)')
 
     dirs, files = _collect_targets(project_path, instrument, paper_figures_dir)
-    any_found = _print_plan(dirs, files)
+    any_found = _print_plan(dirs, files, show_sizes=not args.dry_run)
 
     if not any_found:
         print('Nothing to remove — workspace is already clean.')
