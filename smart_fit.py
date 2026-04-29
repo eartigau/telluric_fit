@@ -547,6 +547,11 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
         doplot = machine_config.get('doplot', False)
     if n_cores is None:
         n_cores = machine_config.get('n_cores', 1)
+        # On SLURM clusters n_cores must not exceed the allocated CPU count
+        slurm_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', n_cores))
+        if n_cores > slurm_cpus:
+            tprint(f"WARNING: n_cores={n_cores} > SLURM_CPUS_PER_TASK={slurm_cpus}; clamping to {slurm_cpus}", color='yellow')
+            n_cores = slurm_cpus
 
     os.chdir(project_path)
     
@@ -612,7 +617,21 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     if n_cores > 1 and len(pending_files) > 1:
         # Parallel processing
         tprint(f"Using parallel processing with {n_cores} cores", color='cyan')
-        
+
+        # numexpr / MKL / OpenBLAS all start internal thread pools at import time.
+        # Forking a process that already owns those threads produces deadlocked workers.
+        # Force single-threaded mode in each library before spawning the pool so
+        # that the child processes start clean.
+        import os as _os
+        _os.environ.setdefault('NUMEXPR_MAX_THREADS', '1')
+        import numexpr as _ne
+        _ne.set_num_threads(1)
+        try:
+            import numpy as _np
+            _np.__config__  # noqa – triggers MKL/OpenBLAS init so the env var is respected
+        except Exception:
+            pass
+
         # Create argument tuples (no plotting in parallel mode)
         args_list = [
             (file, outname, waveref, sky_dict, blaze, instrument, False)
