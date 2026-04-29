@@ -380,6 +380,7 @@
       <a href="#step-telluric">6 — Telluric Correction</a>
 
       <div class="section-label">Tools</div>
+      <a href="#datashare">📤 Data Sharing</a>
       <a href="#reset">🗑 Reset</a>
       <a href="#run-pipeline">▶ run_pipeline.py</a>
       <a href="#molecules">💧 Molecules</a>
@@ -534,6 +535,7 @@ python reset.py --force</code></pre>
         <tr><th>Key</th><th>Description</th></tr>
         <tr><td><code>hot_stars</code></td><td>List of hot-star names used by <code>smart_fit.py</code> and <code>compil_stats.py</code>. Add one name per line. Names must match filenames in <code>hotstars_NIRPS/</code>.</td></tr>
         <tr><td><code>science_targets</code></td><td>List of science targets processed by <code>predict_abso.py</code> (and patched by slinky). Each name must match a sub-directory in <code>scidata_NIRPS/</code>.</td></tr>
+        <tr><td><code>data_recipients</code></td><td>Maps collaborator usernames to the targets they should receive. Used by <code>datashare.py</code> to copy corrected spectra and set ACL permissions. A target can appear under multiple recipients; targets without a recipient are not shared.</td></tr>
       </table>
 
       <h3>Batch settings</h3>
@@ -862,6 +864,39 @@ python run_pipeline.py --only-telluric --object TOI270</code></pre>
     <hr>
 
     <!-- ── RESET ── -->
+    <section id="datashare">
+      <h2>📤 Data Sharing — <code>datashare.py</code></h2>
+      <p>Copies telluric-corrected spectra to collaborators' scratch folders and sets ACL read permissions. Recipients and their targets are defined in <code>data_recipients:</code> in <code>telluric_config.yaml</code>.</p>
+
+      <h3>Usage</h3>
+<pre><code>python datashare.py                      <span class="cmt"># copy all recipients + set ACL + print emails</span>
+python datashare.py --dry-run            <span class="cmt"># preview without copying</span>
+python datashare.py --email-only         <span class="cmt"># only print email draft summaries</span>
+python datashare.py --user alexsm        <span class="cmt"># process a single recipient</span>
+python datashare.py --instrument SPIROU  <span class="cmt"># override instrument</span></code></pre>
+
+      <h3>How it works</h3>
+      <ol>
+        <li>Reads <code>data_recipients</code> from <code>telluric_config.yaml</code></li>
+        <li>For each recipient, copies <code>tellupatched_{instrument}/{TARGET}/</code> → <code>/scratch/eartigau/datashare/{user}/{TARGET}/</code></li>
+        <li>Sets <code>setfacl</code> ACL permissions so the user can read their folder</li>
+        <li>Prints ready-to-send email drafts listing each recipient's targets and download path</li>
+      </ol>
+
+      <h3>Configuring recipients</h3>
+<pre><code>data_recipients:
+  alexsm:
+    - PROXIMA
+    - GJ1
+  allart:
+    - TOI270
+    - WASP193   <span class="cmt"># a target can appear under multiple recipients</span></code></pre>
+      <p>Targets not listed under any recipient are not shared. <code>BPS_CS_22881M0003</code> is an example of an unattributed target.</p>
+    </section>
+
+    <hr>
+
+    <!-- ── RESET ── -->
     <section id="reset">
       <h2>🗑 Reset — <code>reset.py</code></h2>
       <p>Removes all pipeline byproducts for a clean re-reduction. Input data directories are never touched.</p>
@@ -900,12 +935,14 @@ python reset.py --instrument SPIROU   <span class="cmt"># override instrument</s
 <pre><code>python run_pipeline.py [FLAGS]
 
 <span class="cmt">## Step control</span>
-  <span class="flag">--skip-sync</span>        Skip rsync step
-  <span class="flag">--skip-slinky</span>      Skip slinky wavelength correction
-  <span class="flag">--skip-residuals</span>   Skip residual modelling
-  <span class="flag">--skip-telluric</span>    Skip telluric correction
-  <span class="flag">--only-slinky</span>      Run slinky step only (implies --skip-* for others)
-  <span class="flag">--only-telluric</span>    Run telluric step only
+  <span class="flag">--skip-sync</span>          Skip rsync step
+  <span class="flag">--skip-slinky</span>        Skip slinky wavelength correction
+  <span class="flag">--skip-hotstar</span>       Skip hot-star fit (smart_fit.py)
+  <span class="flag">--skip-compilstats</span>   Skip compil_stats (params_fit_tellu + main_absorber)
+  <span class="flag">--skip-residuals</span>     Skip residual modelling
+  <span class="flag">--skip-telluric</span>      Skip telluric correction
+  <span class="flag">--only-slinky</span>        Run slinky step only (implies --skip-* for others)
+  <span class="flag">--only-telluric</span>      Run telluric step only
 
 <span class="cmt">## Target / instrument</span>
   <span class="flag">--instrument</span> NIRPS|SPIROU  Override instrument (default: from config)
