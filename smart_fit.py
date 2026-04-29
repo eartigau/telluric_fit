@@ -527,7 +527,7 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     """
     # Load machine config
     import yaml
-    config_path = os.path.join(os.path.dirname(__file__), 'batch_config.yaml')
+    config_path = os.path.join(os.path.dirname(__file__), 'telluric_config.yaml')
     with open(config_path, 'r') as f:
         batch_config = yaml.safe_load(f)
     
