@@ -641,11 +641,19 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
             for file, outname in pending_files
         ]
         
+        durations_par = []
         with Pool(processes=n_cores) as pool:
-            results = pool.map(_process_wrapper, args_list)
-        
-        n_processed = sum(1 for r in results if r)
-        n_skipped = sum(1 for r in results if not r)
+            for n_done, result in enumerate(pool.imap_unordered(_process_wrapper, args_list), start=1):
+                if result:
+                    n_processed += 1
+                else:
+                    n_skipped += 1
+                elapsed = time.perf_counter() - start_time
+                durations_par.append(elapsed / n_done)
+                remaining = N_pending - n_done
+                mean_dur = elapsed / n_done
+                eta_str = format_eta(remaining * mean_dur) if remaining > 0 else 'done'
+                tprint(f'[{n_done}/{N_pending}] done so far | ETA ~ {eta_str}', color='cyan')
         
     else:
         # Serial processing

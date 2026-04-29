@@ -2458,7 +2458,7 @@ def optimize_exponents(wave: np.ndarray,
             # Sigmoid falloff: 0.5 at 6 sigma, width 1
             # weight = 1 / (1 + exp((deviation - 6) / 1))
             # This gives ~1 for <4 sigma, 0.5 at 6 sigma, ~0 for >8 sigma
-            outlier_weight = 1.0 / (1.0 + np.exp((deviation - 6.0) / 1.0))
+            outlier_weight = 1.0 / (1.0 + np.exp(np.clip((deviation - 6.0) / 1.0, -500, 500)))
             combined_weights[iord] *= outlier_weight
 
         # Objective: weighted standard deviation of gradient

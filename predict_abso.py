@@ -34,6 +34,7 @@ import os
 from aperocore.science import wavecore
 tprint("  - aperocore.science.wavecore loaded")
 import shutil
+import time
 import warnings
 from typing import Dict, Optional, Tuple, List
 import argparse
@@ -63,6 +64,23 @@ tprint("All modules loaded successfully")
 
 # Paper figure tracking
 _paper_figure_done = {'fig6': False}
+
+
+def format_eta(seconds: float) -> str:
+    """Format an ETA in seconds into a concise human-readable string."""
+    if seconds < 0:
+        seconds = 0
+    total = int(round(seconds))
+    days, rem = divmod(total, 86400)
+    hours, rem = divmod(rem, 3600)
+    mins, secs = divmod(rem, 60)
+    if days:
+        return f"{days}d {hours:02d}h {mins:02d}m"
+    if hours:
+        return f"{hours}h {mins:02d}m"
+    if mins:
+        return f"{mins}m {secs:02d}s" if secs else f"{mins}m"
+    return f"{secs}s"
 
 
 def get_paper_figures_config(instrument: str = 'NIRPS'):
@@ -1071,21 +1089,27 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         tprint(f"No files found in scidata_{instrument}/{obj}/")
         return
 
-    # Check if all output files already exist
+    # Split files into pending vs already done
     tprint("Checking for existing output files...")
     batchname = config['batch_name']
     output_dir = os.path.join(project_path, f'tellupatched_{instrument}/{obj}_{batchname}/')
-    all_processed = True
+    pending_files = []
+    n_already_done = 0
     for file in files:
         t_name = file.replace('.fits', '_t.fits')
         t_outname = t_name.replace('t.fits', 'tellupatched_t.fits').split('/')[-1]
         t_outname = os.path.join(output_dir, t_outname)
-        if not os.path.exists(t_outname):
-            all_processed = False
-            break
-    
-    if all_processed:
-        tprint(f"All {len(files)} files already processed. Skipping object...", color='orange')
+        if os.path.exists(t_outname):
+            n_already_done += 1
+        else:
+            pending_files.append(file)
+
+    N_total = len(files)
+    N_pending = len(pending_files)
+    tprint(f'Files total: {N_total}, already done: {n_already_done}, to do: {N_pending}', color='cyan')
+
+    if N_pending == 0:
+        tprint(f"All {N_total} files already processed. Skipping object...", color='orange')
         return
 
     # Load reference wavelength grid
@@ -1106,14 +1130,29 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
     blaze = tt.get_blaze()
 
     # Load main absorber map and TAPAS reference
+    # Fall back to the bundled repo copy (next to this script) if the
+    # project_path version doesn't exist yet (e.g. compil_stats not run).
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    def _resolve(name):
+        p_proj = os.path.join(project_path, name)
+        if os.path.exists(p_proj):
+            return p_proj
+        p_script = os.path.join(script_dir, name)
+        if os.path.exists(p_script):
+            tprint(f"Using bundled {name} from {script_dir} "
+                   f"(not found at {project_path})", color='orange')
+            return p_script
+        return p_proj  # let astropy raise a clear FileNotFoundError
+
     tprint("Loading TAPAS absorption reference...")
-    main_abso = fits.getdata(os.path.join(project_path, f'main_absorber_{instrument}.fits'))
-    hdr_tapas = fits.getheader(os.path.join(project_path, 'LaSilla_tapas.fits'))
+    main_abso = fits.getdata(_resolve(f'main_absorber_{instrument}.fits'))
+    hdr_tapas = fits.getheader(_resolve('LaSilla_tapas.fits'))
 
     # Load model parameters for initial exponents
     tprint("Loading model parameters...")
     model_file = f'params_fit_tellu_{instrument}.csv'
-    model_table = Table.read(os.path.join(project_path, model_file))
+    model_table = Table.read(_resolve(model_file))
     model = {row['PARAM']: row['VALUE'] for row in model_table}
 
     # Determine absorption scaling strategy
@@ -1135,7 +1174,7 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
     n_processed = 0
     n_skipped = 0
 
-    if n_cores > 1 and len(files) > 1:
+    if n_cores > 1 and len(pending_files) > 1:
         # Parallel processing
         tprint(f"Using parallel processing with {n_cores} cores", color='cyan')
         
@@ -1147,20 +1186,33 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         args_list = [
             (file, config_parallel, spl, spl_dv, sky_dict, waveref, all_abso,
              abso_case, main_abso, hdr_tapas, model, blaze)
-            for file in files
+            for file in pending_files
         ]
         
-        # Use starmap for multiple arguments
+        # Use imap_unordered for progress tracking
+        def _pa_wrapper(args):
+            return process_single_file(*args)
+
+        start_time_par = time.time()
+        n_total_par = len(args_list)
         with Pool(processes=n_cores) as pool:
-            results = pool.starmap(process_single_file, args_list)
-        
-        n_processed = sum(1 for r in results if r)
-        n_skipped = sum(1 for r in results if not r)
+            for n_done, result in enumerate(pool.imap_unordered(_pa_wrapper, args_list), start=1):
+                if result:
+                    n_processed += 1
+                else:
+                    n_skipped += 1
+                elapsed = time.time() - start_time_par
+                remaining = n_total_par - n_done
+                mean_dur = elapsed / n_done
+                eta_str = format_eta(remaining * mean_dur) if remaining > 0 else 'done'
+                tprint(f'[{n_done}/{n_total_par}] done so far | ETA ~ {eta_str}', color='cyan')
         
     else:
         # Serial processing
-        for i, file in enumerate(files):
-            tprint(f"[{i+1}/{len(files)}] Processing {obj}: {file}")
+        durations = []
+        for i, file in enumerate(pending_files, start=1):
+            loop_start = time.time()
+            tprint(f"[{i}/{N_pending}] Processing {obj}: {os.path.basename(file)}")
 
             success = process_single_file(
                 file, config, spl, spl_dv, sky_dict, waveref, all_abso,
@@ -1172,13 +1224,21 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
             else:
                 n_skipped += 1
 
+            loop_dur = time.time() - loop_start
+            durations.append(loop_dur)
+            remaining = N_pending - i
+            mean_dur = float(np.mean(durations))
+            if remaining > 0:
+                eta_str = format_eta(remaining * mean_dur)
+                tprint(f'  step {loop_dur:.1f}s | ETA ~ {eta_str}', color='magenta')
+
     # Summary
     tprint(f"{'='*60}")
     tprint(f"PROCESSING COMPLETE")
     tprint(f"{'='*60}")
     tprint(f"Files processed: {n_processed}")
     tprint(f"Files skipped: {n_skipped}")
-    tprint(f"Total files: {len(files)}")
+    tprint(f"Total files: {N_total} ({n_already_done} already done, {N_pending} processed now)")
     tprint(f"{'='*60}")
 
     # Generate diagnostic plots if requested
