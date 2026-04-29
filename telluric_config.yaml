@@ -64,6 +64,7 @@ hot_stars:
 science_targets:
   - PROXIMA
   - TOI270
+  - TOI782
   - GJ1
   - GJ717
   - GJ3307
@@ -132,7 +133,15 @@ data_recipients:
   fbel:
     - GL406
   leslie05:
+    - BPS_CS_22881M0003
+    - TIC151584725
+    - TIC427346731
     - SMETHELLS_20
+  genest:
+    - WASP193
+  lheureux:
+    - TOI782
+
 #acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
 
 
