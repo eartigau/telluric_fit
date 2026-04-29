@@ -1061,7 +1061,7 @@ hdr = fits.getheader(files[0])
 # Construct absorption spectra for each molecule at mean exponent levels
 # all_abso shape: (4, n_orders, n_pixels) for H2O, CO2, CH4, O2
 all_abso = construct_abso(waveref, mean_expos, all_abso=None)
-mean_abso = np.product(all_abso, axis=0)  # Combined transmission (product of all molecules)
+mean_abso = np.prod(all_abso, axis=0)  # Combined transmission (product of all molecules)
 
 # Define a "ceiling" absorption level (95% transmission)
 # Wavelengths with all molecules > 95% are considered "clean"
