@@ -236,10 +236,12 @@ def accurate_airmass(z):
 # Dictionary to accumulate all fitted parameters for output
 tbl_params_fit = dict()
 
-# Instrument selection: 'NIRPS' (near-IR) or 'SPIROU' (near-IR, different site)
-# Each instrument has different wavelength coverage and atmospheric conditions
-#instrument = 'SPIROU'
-instrument = 'NIRPS'
+# Instrument selection: read from command-line arg, else from telluric_config.yaml
+if len(sys.argv) > 1:
+    instrument = sys.argv[1].upper()
+else:
+    _cfg = load_telluric_config()
+    instrument = _cfg.get('instrument', 'NIRPS').upper()
 
 # Sigma-clipping threshold for outlier rejection in iterative fits
 # Points deviating more than sigma_cut × robust_std are removed

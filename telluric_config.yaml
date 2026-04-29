@@ -65,7 +65,6 @@ science_targets:
   - PROXIMA
   - TOI270
   - GJ1
-  - GJ3618
   - GJ717
   - GJ3307
   - GL406
@@ -87,15 +86,54 @@ science_targets:
   - TEEGARDENS_STAR
   - LP_938M71
   - GJ3618
-  - GL406
   - LP_783M2
   - TOI3494
-  - WASP193 
+  - WASP193
   - BPS_CS_22881M0003
   - TIC151584725
   - TIC427346731
   - SMETHELLS_20
-    
+
+# Data sharing: maps each recipient username to the targets they should receive.
+# A target not listed here won't be shared with anyone.
+# A target can appear under multiple recipients.
+data_recipients:
+  alexsm:
+    - PROXIMA
+    - GJ1
+  allart:
+    - TOI270
+    - WASP193
+  ymessias:
+    - GJ717
+    - TOI3494
+    - GJ3307
+    - L230M188
+    - SCR_J1546M5534
+    - TIC304392811
+    - LP_851M346
+    - GJ_1028
+    - LP885M35
+    - DENIS_J104814_6M395606
+    - SIPS_J1259M4336
+    - LP_500M35
+    - GJ3252
+    - GJ3693
+    - GL299
+    - NLTT5556
+    - GJ3622
+    - LP888M18
+    - TEEGARDENS_STAR
+    - LP_938M71
+    - GJ3618
+    - TIC151584725
+    - TIC427346731
+    - LP_783M2
+  fbel:
+    - GL406
+  leslie05:
+    - SMETHELLS_20
+#acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
 
 
 # Demo order for diagnostic plots (shown with plt.show() if doplot=True)

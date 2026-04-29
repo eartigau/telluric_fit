@@ -2,20 +2,24 @@
 Top-level driver for the telluric correction pipeline.
 
 Runs the following steps in sequence for NIRPS or SPIROU:
-  1. rsync     : sync data from remote server (sync_NIRPS or sync_SPIROU)
-  2. slinky    : wavelength solution refinement (slinky_tools.run_slinky)
-  3. residuals : build empirical per-pixel correction maps (residuals.py)
-  4. telluric  : per-object telluric correction (predict_abso.main)
+  1. rsync       : sync data from remote server (sync_NIRPS or sync_SPIROU)
+  2. slinky      : wavelength solution refinement (slinky_tools.run_slinky)
+  3. hot-star    : fit hot-star spectra (smart_fit.py)
+  4. compil_stats: compile stats, build main_absorber + params_fit_tellu (compil_stats.py)
+  5. residuals   : build empirical per-pixel correction maps (residuals.py)
+  6. telluric    : per-object telluric correction (predict_abso.main)
 
 Usage
 -----
-    python run_pipeline.py                   # all steps; instrument read from telluric_config.yaml
-    python run_pipeline.py --skip-sync       # skip rsync
-    python run_pipeline.py --skip-slinky     # skip slinky
-    python run_pipeline.py --skip-residuals  # skip residuals
-    python run_pipeline.py --only-slinky     # run only the slinky step
-    python run_pipeline.py --only-telluric   # run only the telluric correction step
-    python run_pipeline.py --object PROXIMA  # process a single object (default: science_targets from YAML)
+    python run_pipeline.py                      # all steps; instrument read from telluric_config.yaml
+    python run_pipeline.py --skip-sync          # skip rsync
+    python run_pipeline.py --skip-slinky        # skip slinky
+    python run_pipeline.py --skip-hotstar       # skip hot-star fit
+    python run_pipeline.py --skip-compilstats   # skip compil_stats
+    python run_pipeline.py --skip-residuals     # skip residuals
+    python run_pipeline.py --only-slinky        # run only the slinky step
+    python run_pipeline.py --only-telluric      # run only the telluric correction step
+    python run_pipeline.py --object PROXIMA     # process a single object (default: science_targets from YAML)
     python run_pipeline.py --instrument SPIROU
 """
 
@@ -57,7 +61,7 @@ def _step_header(title):
 # ---------------------------------------------------------------------------
 
 def run_sync(instrument):
-    _step_header(f'STEP 1/4 — SYNC ({instrument})')
+    _step_header(f'STEP 1/6 — SYNC ({instrument})')
     sync_script = os.path.join(SCRIPT_DIR, f'sync_{instrument}')
     if not os.path.exists(sync_script):
         _tprint(f'Script {sync_script} not found — skipping sync.')
@@ -74,18 +78,43 @@ def run_sync(instrument):
 # ---------------------------------------------------------------------------
 
 def run_slinky():
-    _step_header('STEP 2/4 — SLINKY (wavelength solution refinement)')
+    _step_header('STEP 2/6 — SLINKY (wavelength solution refinement)')
     import slinky_tools
     slinky_tools.run_slinky()
     _tprint('Slinky done.')
 
 
 # ---------------------------------------------------------------------------
-# Step 3 — residuals
+# Step 3 — hot-star fit
+# ---------------------------------------------------------------------------
+
+def run_hotstar(instrument):
+    _step_header(f'STEP 3/6 — HOT-STAR FIT ({instrument})')
+    import smart_fit as sf
+    sf.main(instrument=instrument)
+    _tprint('Hot-star fit done.')
+
+
+# ---------------------------------------------------------------------------
+# Step 4 — compil_stats
+# ---------------------------------------------------------------------------
+
+def run_compilstats(instrument):
+    _step_header('STEP 4/6 — COMPIL_STATS (params_fit_tellu + main_absorber)')
+    cs_script = os.path.join(SCRIPT_DIR, 'compil_stats.py')
+    ret = subprocess.call([sys.executable, cs_script, instrument], cwd=SCRIPT_DIR)
+    if ret != 0:
+        _tprint(f'WARNING: compil_stats.py returned exit code {ret}.')
+    else:
+        _tprint('Compil_stats done.')
+
+
+# ---------------------------------------------------------------------------
+# Step 5 — residuals
 # ---------------------------------------------------------------------------
 
 def run_residuals():
-    _step_header('STEP 3/4 — RESIDUALS (empirical per-pixel correction maps)')
+    _step_header('STEP 5/6 — RESIDUALS (empirical per-pixel correction maps)')
     residuals_script = os.path.join(SCRIPT_DIR, 'residuals.py')
     ret = subprocess.call([sys.executable, residuals_script], cwd=SCRIPT_DIR)
     if ret != 0:
@@ -95,11 +124,11 @@ def run_residuals():
 
 
 # ---------------------------------------------------------------------------
-# Step 4 — predict_abso par objet
+# Step 6 — predict_abso par objet
 # ---------------------------------------------------------------------------
 
 def run_telluric(objects, instrument, batch_name, template_style, force_recompute):
-    _step_header(f'STEP 4/4 — TELLURIC CORRECTION ({instrument})')
+    _step_header(f'STEP 6/6 — TELLURIC CORRECTION ({instrument})')
     _tprint(f'Objects: {objects}')
 
     # Import here to avoid slow loading when only --help is requested
@@ -152,14 +181,16 @@ def main():
 
     # Step control
     step_group = parser.add_argument_group('Step control')
-    step_group.add_argument('--skip-sync',      action='store_true', help='Skip the rsync step')
-    step_group.add_argument('--skip-slinky',    action='store_true', help='Skip the slinky step')
-    step_group.add_argument('--skip-residuals', action='store_true', help='Skip the residuals step')
-    step_group.add_argument('--skip-telluric',  action='store_true', help='Skip the telluric correction step')
-    step_group.add_argument('--only-slinky',    action='store_true',
-                            help='Run only the slinky step (implies --skip-sync --skip-residuals --skip-telluric)')
-    step_group.add_argument('--only-telluric',  action='store_true',
-                            help='Run only the telluric correction step (implies --skip-sync --skip-slinky --skip-residuals)')
+    step_group.add_argument('--skip-sync',        action='store_true', help='Skip the rsync step')
+    step_group.add_argument('--skip-slinky',      action='store_true', help='Skip the slinky step')
+    step_group.add_argument('--skip-hotstar',     action='store_true', help='Skip the hot-star fit step')
+    step_group.add_argument('--skip-compilstats', action='store_true', help='Skip the compil_stats step')
+    step_group.add_argument('--skip-residuals',   action='store_true', help='Skip the residuals step')
+    step_group.add_argument('--skip-telluric',    action='store_true', help='Skip the telluric correction step')
+    step_group.add_argument('--only-slinky',      action='store_true',
+                            help='Run only the slinky step')
+    step_group.add_argument('--only-telluric',    action='store_true',
+                            help='Run only the telluric correction step (implies all other skips)')
 
     parser.add_argument('--recompute', action='store_true',
                         help='Force recomputation of the pre-computed absorption grid')
@@ -168,12 +199,16 @@ def main():
 
     if args.only_slinky:
         args.skip_sync = True
+        args.skip_hotstar = True
+        args.skip_compilstats = True
         args.skip_residuals = True
         args.skip_telluric = True
 
     if args.only_telluric:
         args.skip_sync = True
         args.skip_slinky = True
+        args.skip_hotstar = True
+        args.skip_compilstats = True
         args.skip_residuals = True
 
     instrument = args.instrument.upper()
@@ -195,10 +230,18 @@ def main():
         run_slinky()
 
     # ---- Step 3 ----
+    if not args.skip_hotstar:
+        run_hotstar(instrument)
+
+    # ---- Step 4 ----
+    if not args.skip_compilstats:
+        run_compilstats(instrument)
+
+    # ---- Step 5 ----
     if not args.skip_residuals:
         run_residuals()
 
-    # ---- Step 4 ----
+    # ---- Step 6 ----
     if not args.skip_telluric:
         run_telluric(
             objects=objects,
