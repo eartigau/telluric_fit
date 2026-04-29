@@ -581,6 +581,9 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     # Find files
     all_files = np.array(glob.glob(f'hotstars_{instrument}/*pp_e2dsff_*.fits'))
 
+    # Ensure output directory exists
+    os.makedirs(f'tellu_fit_{instrument}', exist_ok=True)
+
     # Partition into done vs pending
     pending_files = []
     done_files = []
