@@ -185,6 +185,9 @@ def main():
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
     basedir = '/scratch/eartigau/datashare'
 
+    if not args.dry_run and not args.email_only:
+        os.makedirs(basedir, exist_ok=True)
+
     if not args.email_only:
         print(f'Instrument   : {instrument}')
         print(f'Batch        : {batch_name}')
@@ -195,7 +198,7 @@ def main():
         print()
 
     email_blocks = []
-    acl_pending = []  # [(user, user_dir)] to set ACLs after all copies are done
+    acl_pending = []  # [(user, user_dir)] — applied after all copies to avoid mask interference
 
     for user, targets in sorted(recipients.items()):
         user_dir = os.path.join(basedir, user)
@@ -220,7 +223,8 @@ def main():
                     print(f'  [MISS]  {target}  (not found in {tellupatched_dir})')
 
         if not args.email_only and not args.dry_run and found_targets:
-            acl_pending.append((user, user_dir))
+            set_acl(basedir, user_dir, user, dry_run=False)
+            print(f'  ACL set for {user}')
 
         if not args.email_only:
             print(f'  → {len(found_targets)} target(s), {total_files} file(s) total')
