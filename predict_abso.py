@@ -495,6 +495,10 @@ def save_corrected_spectrum(t_name: str, t_outname: str, sp_corr: np.ndarray,
         hdul.flush()
 
 
+def _pa_wrapper(args):
+    return process_single_file(*args)
+
+
 def process_single_file(file: str, config: Dict, spl, spl_dv,
                        sky_dict: Dict, waveref: np.ndarray,
                        all_abso: np.ndarray, abso_case: np.ndarray,
@@ -1190,9 +1194,6 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         ]
         
         # Use imap_unordered for progress tracking
-        def _pa_wrapper(args):
-            return process_single_file(*args)
-
         start_time_par = time.time()
         n_total_par = len(args_list)
         with Pool(processes=n_cores) as pool:
