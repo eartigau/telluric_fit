@@ -47,10 +47,24 @@ def get_project_path(config):
 # Core logic
 # ---------------------------------------------------------------------------
 
-def collect_target_files(tellupatched_dir, target):
+def find_target_dir(tellupatched_dir, target, batch_name):
+    """Resolve the on-disk folder for a target, trying {target}_{batch_name}_smart first,
+    then {target}_{batch_name}, then plain {target}."""
+    for candidate in [
+        f'{target}_{batch_name}_smart',
+        f'{target}_{batch_name}',
+        target,
+    ]:
+        path = os.path.join(tellupatched_dir, candidate)
+        if os.path.isdir(path):
+            return path
+    return None
+
+
+def collect_target_files(tellupatched_dir, target, batch_name):
     """Return list of files to share for a given target."""
-    target_dir = os.path.join(tellupatched_dir, target)
-    if not os.path.isdir(target_dir):
+    target_dir = find_target_dir(tellupatched_dir, target, batch_name)
+    if target_dir is None:
         return []
     files = []
     for root, _dirs, fnames in os.walk(target_dir):
@@ -59,14 +73,14 @@ def collect_target_files(tellupatched_dir, target):
     return sorted(files)
 
 
-def copy_target(src_dir, target, dest_user_dir, dry_run):
+def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name):
     """Copy all files for a target into dest_user_dir/target/."""
-    src_target = os.path.join(src_dir, target)
+    src_target = find_target_dir(src_dir, target, batch_name)
     dst_target = os.path.join(dest_user_dir, target)
-    if not os.path.isdir(src_target):
+    if src_target is None:
         return 0, False   # (n_files, found)
 
-    files = collect_target_files(src_dir, target)
+    files = collect_target_files(src_dir, target, batch_name)
     if not dry_run:
         os.makedirs(dst_target, exist_ok=True)
         for fpath in files:
@@ -190,7 +204,7 @@ def main():
             print(f'[{user}]')
 
         for target in targets:
-            n_files, found = copy_target(tellupatched_dir, target, user_dir, args.dry_run or args.email_only)
+            n_files, found = copy_target(tellupatched_dir, target, user_dir, args.dry_run or args.email_only, batch_name)
             if found:
                 found_targets.append(target)
                 total_files += n_files

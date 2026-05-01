@@ -465,7 +465,7 @@ def save_corrected_spectrum(t_name: str, t_outname: str, sp_corr: np.ndarray,
     hdr['CH4_VMR'] = (ch4_vmr, '[ppm] zenith, normalized pressure')
     hdr['O2_AIRM'] = (o2_frac, 'Airmass equivalent fraction at normalized pressure')
 
-    # Store optimized exponents
+    # Store optimized exponents 
     for i, molecule in enumerate(molecules):
         hdr[f'EXPO_{molecule}'] = (expos[i], f'Optimized exponent for {molecule}')
 
