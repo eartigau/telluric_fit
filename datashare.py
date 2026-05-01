@@ -81,14 +81,16 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name):
         return 0, False   # (n_files, found)
 
     files = collect_target_files(src_dir, target, batch_name)
+    n_total = len(files)
     if not dry_run:
         os.makedirs(dst_target, exist_ok=True)
-        for fpath in files:
+        for i, fpath in enumerate(files, 1):
             rel = os.path.relpath(fpath, src_target)
             dst = os.path.join(dst_target, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
+            print(f'    [{i}/{n_total}] {rel}', flush=True)
             shutil.copy2(fpath, dst)
-    return len(files), True
+    return n_total, True
 
 
 def set_acl(basedir, user_dir, user, dry_run):
