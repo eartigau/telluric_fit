@@ -1017,7 +1017,11 @@ def get_velo(wave: np.ndarray,
 
     # Fit super-Gaussian to CCF peak
     p0 = [np.nanmax(amp), dvs[np.nanargmax(amp)], 5.0, 0, 2]
-    popt, pcov = curve_fit(gauss, dvs, amp, p0=p0)
+    try:
+        popt, pcov = curve_fit(gauss, dvs, amp, p0=p0, maxfev=10000)
+    except RuntimeError:
+        tprint('  curve_fit failed in get_velo — returning CCF peak position', color='red')
+        return dvs[np.nanargmax(amp)]
 
     tprint(f'  Optimal velocity shift: {popt[1]:.2f} km/s', color='blue')
 
