@@ -195,6 +195,7 @@ def main():
         print()
 
     email_blocks = []
+    acl_pending = []  # [(user, user_dir)] to set ACLs after all copies are done
 
     for user, targets in sorted(recipients.items()):
         user_dir = os.path.join(basedir, user)
@@ -219,8 +220,7 @@ def main():
                     print(f'  [MISS]  {target}  (not found in {tellupatched_dir})')
 
         if not args.email_only and not args.dry_run and found_targets:
-            set_acl(basedir, user_dir, user, dry_run=False)
-            print(f'  ACL set for {user}')
+            acl_pending.append((user, user_dir))
 
         if not args.email_only:
             print(f'  → {len(found_targets)} target(s), {total_files} file(s) total')
@@ -229,6 +229,11 @@ def main():
         email_blocks.append(build_email(
             user, found_targets, batch_name, basedir, instrument, missing_targets
         ))
+
+    # Apply ACLs after all copies are done to avoid mask interference between users
+    for user, user_dir in acl_pending:
+        set_acl(basedir, user_dir, user, dry_run=False)
+        print(f'  ACL set for {user}')
 
     # Print email summary
     print('\n' + '=' * 60)
