@@ -11,8 +11,8 @@ greatly speeding up repeated runs.
 
 Usage
 -----
-    python datashare.py                     # copy + set ACL + write emails
-    python datashare.py --dry-run           # preview without copying
+    python datashare.py                     # copy + prune stale + set ACL + write emails
+    python datashare.py --dry-run           # preview without copying or removing
     python datashare.py --user alexsm       # only process one recipient
     python datashare.py --email-only        # only write/print email summaries
     python datashare.py --instrument SPIROU # override instrument
@@ -221,6 +221,25 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name, cache=None)
     return n_total, True
 
 
+def prune_user_dir(user_dir, expected_targets, dry_run):
+    """Remove subdirectories in user_dir that are not in expected_targets.
+
+    Returns a list of removed (or would-be-removed) directory names.
+    """
+    removed = []
+    if not os.path.isdir(user_dir):
+        return removed
+    for entry in sorted(os.listdir(user_dir)):
+        full = os.path.join(user_dir, entry)
+        if not os.path.isdir(full):
+            continue
+        if entry not in expected_targets:
+            removed.append(entry)
+            if not dry_run:
+                shutil.rmtree(full)
+    return removed
+
+
 def set_acl(basedir, user_dir, user, dry_run):
     """Set setfacl permissions so the user can read their folder."""
     if dry_run:
@@ -368,6 +387,13 @@ def main():
                 missing_targets.append(target)
                 if not args.email_only:
                     print(f'  [MISS]  {target}  (not found in {tellupatched_dir})')
+
+        # Remove stale target directories no longer assigned to this user
+        if not args.email_only:
+            pruned = prune_user_dir(user_dir, set(targets), args.dry_run)
+            for stale in pruned:
+                tag = '(dry)' if args.dry_run else 'removed'
+                print(f'  [{tag}]  {stale}  (no longer assigned — deleted)')
 
         if not args.email_only and not args.dry_run and found_targets:
             set_acl(basedir, user_dir, user, dry_run=False)
