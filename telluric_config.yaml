@@ -105,6 +105,8 @@ data_recipients:
   allart:
     - TOI270
     - WASP193
+  avidaan:
+    - TOI3494
   ymessias:
     - GJ717
     - TOI3494
