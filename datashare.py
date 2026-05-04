@@ -20,6 +20,7 @@ import shutil
 import subprocess
 import sys
 import yaml
+from astropy.io import fits
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -73,6 +74,32 @@ def collect_target_files(tellupatched_dir, target, batch_name):
     return sorted(files)
 
 
+def fits_checksum(path):
+    """Return the CHECKSUM value from the primary HDU header, or None if absent/unreadable."""
+    try:
+        hdr = fits.getheader(path, ext=0)
+        return hdr.get('CHECKSUM', None)
+    except Exception:
+        return None
+
+
+def needs_copy(src, dst):
+    """Return True if src should be copied to dst.
+
+    Copies if:
+    - dst does not exist, or
+    - either file lacks a FITS CHECKSUM keyword, or
+    - the CHECKSUM values differ.
+    """
+    if not os.path.exists(dst):
+        return True
+    src_cs = fits_checksum(src)
+    dst_cs = fits_checksum(dst)
+    if src_cs is None or dst_cs is None:
+        return True
+    return src_cs != dst_cs
+
+
 def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name):
     """Copy all files for a target into dest_user_dir/target/."""
     src_target = find_target_dir(src_dir, target, batch_name)
@@ -88,8 +115,11 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name):
             rel = os.path.relpath(fpath, src_target)
             dst = os.path.join(dst_target, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
-            print(f'    [{i}/{n_total}] {rel}', flush=True)
-            shutil.copy2(fpath, dst)
+            if needs_copy(fpath, dst):
+                print(f'    [{i}/{n_total}] {rel}', flush=True)
+                shutil.copy2(fpath, dst)
+            else:
+                print(f'    [{i}/{n_total}] {rel}  [skip — checksum match]', flush=True)
     return n_total, True
 
 
