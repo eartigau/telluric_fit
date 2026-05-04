@@ -44,6 +44,16 @@ def get_project_path(config):
     return SCRIPT_DIR
 
 
+def get_hostname(config):
+    """Return the hostname of the current machine, from config if available."""
+    machines = config.get('machines', {})
+    for _name, mcfg in machines.items():
+        detect = mcfg.get('detect_path', '')
+        if detect and os.path.exists(detect):
+            return mcfg.get('hostname', None)
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Core logic
 # ---------------------------------------------------------------------------
@@ -141,8 +151,13 @@ def set_acl(basedir, user_dir, user, dry_run):
             break
 
 
-def build_email(user, targets, batch_name, basedir, instrument, missing):
+def build_email(user, targets, batch_name, basedir, instrument, missing, hostname=None):
     """Return a formatted email string for a recipient."""
+    user_path = os.path.join(basedir, user)
+    if hostname:
+        rsync_cmd = f'rsync -avz {user}@{hostname}:{user_path}/ ./{user}/'
+    else:
+        rsync_cmd = f'rsync -avz <server>:{user_path}/ ./{user}/'
     lines = [
         f'=== Email to {user} ===',
         f'Subject: {instrument} telluric-corrected data available (batch {batch_name})',
@@ -150,7 +165,10 @@ def build_email(user, targets, batch_name, basedir, instrument, missing):
         f'Hi {user},',
         '',
         f'Your telluric-corrected {instrument} data for batch {batch_name} is now available at:',
-        f'  {os.path.join(basedir, user)}/',
+        f'  {user_path}/',
+        '',
+        'To download your data, run the following command on your local machine:',
+        f'  {rsync_cmd}',
         '',
     ]
 
@@ -199,6 +217,7 @@ def main():
     config = load_config()
     instrument = (args.instrument or config.get('instrument', 'NIRPS')).upper()
     project_path = get_project_path(config)
+    hostname = get_hostname(config)
     batch_name = config.get('batch', {}).get('name', 'unknown')
 
     recipients = config.get('data_recipients', {})
@@ -261,7 +280,8 @@ def main():
             print()
 
         email_blocks.append(build_email(
-            user, found_targets, batch_name, basedir, instrument, missing_targets
+            user, found_targets, batch_name, basedir, instrument, missing_targets,
+            hostname=hostname,
         ))
 
     # Apply ACLs after all copies are done to avoid mask interference between users

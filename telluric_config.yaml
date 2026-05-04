@@ -238,6 +238,7 @@ machines:
   FIR:
     detect_path: '/home/eartigau/.fir_token'
     project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit'
+    hostname: 'fir.alliance.computecanada.ca'
     doplot: false                # Don't show interactive plots on FIR
     n_cores: 8                   # Number of cores for parallel processing
     # Environment setup for Compute Canada clusters
