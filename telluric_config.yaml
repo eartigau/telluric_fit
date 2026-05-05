@@ -94,6 +94,8 @@ science_targets:
   - TIC151584725
   - TIC427346731
   - SMETHELLS_20
+  - GJ643
+  - YZ_CMI
 
 # Data sharing: maps each recipient username to the targets they should receive.
 # A target not listed here won't be shared with anyone.
@@ -143,7 +145,9 @@ data_recipients:
     - WASP193
   lheureux:
     - TOI782
-    
+  sgrouffal
+    - GJ643
+    - YZ_CMI
 
 #acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
 
