@@ -96,11 +96,58 @@ science_targets:
   - SMETHELLS_20
   - GJ643
   - YZ_CMI
+  - NGC2345NO50
+  - NGC2423NO3
+  - NGC3114NO223
+  - NGC3114NO6
+  - NGC3114NO283
+  - NGC3532NO649
+  - NGC3532NO221
+  - NGC3532NO670
+  - NGC3680NO34
+  - NGC3680NO26
+  - NGC3680NO41
+  - NGC3680NO53
+  - NGC4349NO127
+  - NGC5822NO375
+  - IC4651NO9122
+  - IC4756NO52
+  - TOI904
+  - HD50281
+  - HD50281B
+  - GL297_2A
+  - GL297_2B
+  - GL166C
+
+
 
 # Data sharing: maps each recipient username to the targets they should receive.
 # A target not listed here won't be shared with anyone.
 # A target can appear under multiple recipients.
 data_recipients:
+  edelgado:
+    - NGC2345NO50
+    - NGC2423NO3
+    - NGC3114NO223
+    - NGC3114NO6
+    - NGC3114NO283
+    - NGC3532NO649
+    - NGC3532NO221
+    - NGC3532NO670
+    - NGC3680NO34
+    - NGC3680NO26
+    - NGC3680NO41
+    - NGC3680NO53
+    - NGC4349NO127
+    - NGC5822NO375
+    - IC4651NO9122
+    - IC4756NO52
+    - TOI904
+    - HD50281
+    - HD50281B
+    - GL297_2A
+    - GL297_2B
+    - GL166C
   alexsm:
     - PROXIMA
     - GJ1
