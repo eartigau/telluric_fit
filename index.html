@@ -866,32 +866,48 @@ python run_pipeline.py --only-telluric --object TOI270</code></pre>
     <!-- ── RESET ── -->
     <section id="datashare">
       <h2>📤 Data Sharing — <code>datashare.py</code></h2>
-      <p>Copies telluric-corrected spectra to collaborators' scratch folders and sets ACL read permissions. Recipients and their targets are defined in <code>data_recipients:</code> in <code>telluric_config.yaml</code>.</p>
+      <p>Copies telluric-corrected spectra to collaborators' scratch folders and sets ACL read permissions. Recipients, their targets, names, and email addresses are defined in <code>data_recipients:</code> in <code>telluric_config.yaml</code>.</p>
 
       <h3>Usage</h3>
 <pre><code>python datashare.py                      <span class="cmt"># copy all recipients + set ACL + print emails</span>
 python datashare.py --dry-run            <span class="cmt"># preview without copying</span>
 python datashare.py --email-only         <span class="cmt"># only print email draft summaries</span>
-python datashare.py --user alexsm        <span class="cmt"># process a single recipient</span>
-python datashare.py --instrument SPIROU  <span class="cmt"># override instrument</span></code></pre>
+python datashare.py --send-email         <span class="cmt"># interactive menu to send emails via Gmail</span>
+python datashare.py --user fbel          <span class="cmt"># process a single recipient</span>
+python datashare.py --instrument SPIROU  <span class="cmt"># override instrument</span>
+python datashare.py --no-prompt          <span class="cmt"># skip prompts for missing name/email (batch mode)</span></code></pre>
 
       <h3>How it works</h3>
       <ol>
         <li>Reads <code>data_recipients</code> from <code>telluric_config.yaml</code></li>
+        <li>Prompts for any missing name or email address and saves them back to the yaml</li>
         <li>For each recipient, copies <code>tellupatched_{instrument}/{TARGET}/</code> → <code>/scratch/eartigau/datashare/{user}/{TARGET}/</code></li>
         <li>Sets <code>setfacl</code> ACL permissions so the user can read their folder</li>
-        <li>Prints ready-to-send email drafts listing each recipient's targets and download path</li>
+        <li>Prints ready-to-send email drafts with a polite greeting using the recipient's real name</li>
+        <li>With <code>--send-email</code>: shows a numbered list of recipients — type the numbers of those to email and press Enter</li>
       </ol>
+
+      <h3>Sending data to a single person</h3>
+<pre><code><span class="cmt"># Copy files + interactive email menu for Flavie only:</span>
+python datashare.py --send-email --user fbel
+
+<span class="cmt"># Files already copied — just send the email:</span>
+python datashare.py --email-only --send-email --user fbel</code></pre>
 
       <h3>Configuring recipients</h3>
 <pre><code>data_recipients:
-  alexsm:
-    - PROXIMA
-    - GJ1
+  fbel:
+    name: Flavie Bélanger
+    email: flavie.belanger@umontreal.ca
+    targets:
+      - GL406
   allart:
-    - TOI270
-    - WASP193   <span class="cmt"># a target can appear under multiple recipients</span></code></pre>
-      <p>Targets not listed under any recipient are not shared. <code>BPS_CS_22881M0003</code> is an example of an unattributed target.</p>
+    name: Romain Allart
+    email: romain.allart@umontreal.ca
+    targets:
+      - TOI270
+      - WASP193   <span class="cmt"># a target can appear under multiple recipients</span></code></pre>
+      <p>Targets not listed under any recipient are not shared. If <code>name</code> or <code>email</code> is absent, the script will prompt interactively and save the answer back to the yaml.</p>
     </section>
 
     <hr>

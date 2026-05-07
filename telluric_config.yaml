@@ -121,80 +121,115 @@ science_targets:
 
 
 
-# Data sharing: maps each recipient username to the targets they should receive.
+# Data sharing: maps each recipient username to their name, email and targets.
 # A target not listed here won't be shared with anyone.
 # A target can appear under multiple recipients.
 data_recipients:
+  eartigau:
+    name: Étienne Artigau
+    email: etienne.artigau@umontreal.ca
+    targets:
+      - PROXIMA
   edelgado:
-    - NGC2345NO50
-    - NGC2423NO3
-    - NGC3114NO223
-    - NGC3114NO6
-    - NGC3114NO283
-    - NGC3532NO649
-    - NGC3532NO221
-    - NGC3532NO670
-    - NGC3680NO34
-    - NGC3680NO26
-    - NGC3680NO41
-    - NGC3680NO53
-    - NGC4349NO127
-    - NGC5822NO375
-    - IC4651NO9122
-    - IC4756NO52
-    - TOI904
-    - HD50281
-    - HD50281B
-    - GL297_2A
-    - GL297_2B
-    - GL166C
+    name: Elisa Delgado Mena
+    email: elisa.delgado@astro.up.pt
+    targets:
+      - NGC2345NO50
+      - NGC2423NO3
+      - NGC3114NO223
+      - NGC3114NO6
+      - NGC3114NO283
+      - NGC3532NO649
+      - NGC3532NO221
+      - NGC3532NO670
+      - NGC3680NO34
+      - NGC3680NO26
+      - NGC3680NO41
+      - NGC3680NO53
+      - NGC4349NO127
+      - NGC5822NO375
+      - IC4651NO9122
+      - IC4756NO52
+      - TOI904
+      - HD50281
+      - HD50281B
+      - GL297_2A
+      - GL297_2B
+      - GL166C
   alexsm:
-    - PROXIMA
-    - GJ1
+    name: Alejandro Suárez Mascareño
+    email: alejandro.suarez.mascareno@iac.es
+    targets:
+      - PROXIMA
+      - GJ1
   allart:
-    - TOI270
-    - WASP193
+    name: Romain Allart
+    email: romain.allart@umontreal.ca
+    targets:
+      - TOI270
+      - WASP193
   avidaan:
-    - TOI3494
+    name: Avidaan Srivastava
+    email: avidaan.srivastava@umontreal.ca
+    targets:
+      - TOI3494
   ymessias:
-    - GJ717
-    - TOI3494
-    - GJ3307
-    - L230M188
-    - SCR_J1546M5534
-    - TIC304392811
-    - LP_851M346
-    - GJ_1028
-    - LP885M35
-    - DENIS_J104814_6M395606
-    - SIPS_J1259M4336
-    - LP_500M35
-    - GJ3252
-    - GJ3693
-    - GL299
-    - NLTT5556
-    - GJ3622
-    - LP888M18
-    - TEEGARDENS_STAR
-    - LP_938M71
-    - GJ3618
-    - TIC151584725
-    - TIC427346731
-    - LP_783M2
+    name: Yuri Messias
+    email: yuri.messias1@gmail.com
+    targets:
+      - GJ717
+      - TOI3494
+      - GJ3307
+      - L230M188
+      - SCR_J1546M5534
+      - TIC304392811
+      - LP_851M346
+      - GJ_1028
+      - LP885M35
+      - DENIS_J104814_6M395606
+      - SIPS_J1259M4336
+      - LP_500M35
+      - GJ3252
+      - GJ3693
+      - GL299
+      - NLTT5556
+      - GJ3622
+      - LP888M18
+      - TEEGARDENS_STAR
+      - LP_938M71
+      - GJ3618
+      - TIC151584725
+      - TIC427346731
+      - LP_783M2
   fbel:
-    - GL406
+    name: Flavie Bélanger
+    email: flavie.belanger@umontreal.ca
+    targets:
+      - GL406
   leslie05:
-    - BPS_CS_22881M0003
-    - TIC151584725
-    - TIC427346731
-    - SMETHELLS_20
+    name: Leslie Moranta
+    email: leslie.moranta@umontreal.ca
+    targets:
+      - BPS_CS_22881M0003
+      - TIC151584725
+      - TIC427346731
+      - SMETHELLS_20
   genest:
-    - WASP193
+    name: Frédéric Genest
+    email: frederic.genest.1@umontreal.ca
+    targets:
+      - WASP193
   lheureux:
-    - TOI782
+    name: Alexandrine L'Heureux
+    email: alexandrine.lheureux@umontreal.ca
+    targets:
+      - TOI782
   grouffal:
-    - GJ643
-    - YZ_CMI
+    name: Salomé Grouffal
+    email: salome.grouffal@univ-grenoble-alpes.fr
+    targets:
+      - GJ643
+      - YZ_CMI
 
 #acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
 

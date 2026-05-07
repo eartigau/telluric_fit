@@ -418,6 +418,52 @@ objects_config.yaml (batch configuration)
 
 ---
 
+## Data Sharing — `datashare.py`
+
+Copies telluric-corrected spectra to collaborators' scratch folders on the cluster and sets ACL read permissions. Recipients are configured in `telluric_config.yaml` under `data_recipients`.
+
+### Sending data to one person
+
+```bash
+# Copy files + interactive email menu for one user:
+python datashare.py --send-email --user fbel
+
+# Files already copied — just send the email:
+python datashare.py --email-only --send-email --user fbel
+```
+
+### All recipients at once
+
+```bash
+python datashare.py                      # copy all + set ACL + print email drafts
+python datashare.py --send-email         # same, then interactive menu to send emails
+python datashare.py --dry-run            # preview without copying anything
+python datashare.py --no-prompt          # skip prompts for missing info (batch mode)
+python datashare.py --instrument SPIROU  # override instrument
+```
+
+### How `--send-email` works
+
+1. Prints email drafts for all processed recipients
+2. Shows a numbered list: `1. Flavie Bélanger <flavie.belanger@umontreal.ca>`
+3. Type the numbers of the people to email (e.g. `1 3`) or `all`, then Enter
+4. Emails are sent via Gmail SMTP using the App Password stored in the macOS Keychain (or `~/.gmail_app_password` on the cluster)
+
+### Configuring recipients in `telluric_config.yaml`
+
+```yaml
+data_recipients:
+  fbel:
+    name: Flavie Bélanger
+    email: flavie.belanger@umontreal.ca
+    targets:
+      - GL406
+```
+
+If `name` or `email` is missing, the script will prompt interactively and save the answer back to the yaml. A target can appear under multiple recipients.
+
+---
+
 ## Important Notes
 
 ### Color-Coded Output

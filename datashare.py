@@ -5,6 +5,11 @@ Reads data_recipients from telluric_config.yaml, copies the relevant
 tellupatched files to /scratch/eartigau/datashare/<user>/, sets ACL
 permissions with setfacl, writes per-user email files, and prints a summary.
 
+Each recipient in data_recipients may use the legacy list form (list of
+targets) or the new dict form with 'email' and 'targets' keys.  If an email
+address is missing the script will prompt for it and save it back to the yaml
+(unless --no-prompt is given).
+
 A CSV checksum cache (basedir/.checksum_cache.csv) stores (mtime, checksum)
 per file so that FITS headers are only re-read when a file has changed,
 greatly speeding up repeated runs.
@@ -15,19 +20,26 @@ Usage
     python datashare.py --dry-run           # preview without copying or removing
     python datashare.py --user alexsm       # only process one recipient
     python datashare.py --email-only        # only write/print email summaries
+    python datashare.py --send-email        # interactive menu to send emails via Gmail
     python datashare.py --instrument SPIROU # override instrument
+    python datashare.py --no-prompt         # skip interactive email-address prompts
 """
 
 import argparse
 import csv
 import os
 import shutil
+import smtplib
 import subprocess
 import sys
+from email.mime.text import MIMEText
 import yaml
 from astropy.io import fits
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+CFG_PATH = os.path.join(SCRIPT_DIR, 'telluric_config.yaml')
+
+SENDER_EMAIL = 'etienne.artigau@gmail.com'
 
 
 # ---------------------------------------------------------------------------
@@ -35,9 +47,156 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # ---------------------------------------------------------------------------
 
 def load_config():
-    cfg_path = os.path.join(SCRIPT_DIR, 'telluric_config.yaml')
-    with open(cfg_path) as fh:
+    with open(CFG_PATH) as fh:
         return yaml.safe_load(fh)
+
+
+def save_config(config):
+    """Write the config back to telluric_config.yaml (comments are not preserved)."""
+    with open(CFG_PATH, 'w') as fh:
+        yaml.dump(config, fh, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def parse_recipients(raw_recipients):
+    """Normalise data_recipients to {user: {'name': str|None, 'email': str|None, 'targets': list}}.
+
+    Accepts both the legacy list form and the new dict form with name/email/targets keys.
+    """
+    result = {}
+    for user, value in raw_recipients.items():
+        if isinstance(value, list):
+            result[user] = {'name': None, 'email': None, 'targets': value}
+        else:
+            result[user] = {
+                'name': value.get('name') or None,
+                'email': value.get('email') or None,
+                'targets': value.get('targets', []),
+            }
+    return result
+
+
+def prompt_missing_info(parsed, config, no_prompt=False):
+    """Interactively ask for missing name/email and persist to the yaml."""
+    cfg_recipients = config.setdefault('data_recipients', {})
+    changed = False
+    for user, info in parsed.items():
+        entry = cfg_recipients.get(user)
+        if isinstance(entry, list):
+            entry = {'targets': entry}
+            cfg_recipients[user] = entry
+
+        if not info['name']:
+            if no_prompt:
+                print(f'  [WARN] No name for {user} — pass --no-prompt to silence')
+            else:
+                name = input(f'  Full name for {user}: ').strip()
+                if name:
+                    info['name'] = name
+                    entry['name'] = name
+                    changed = True
+
+        if not info['email']:
+            if no_prompt:
+                print(f'  [WARN] No email for {user} — pass --no-prompt to silence')
+            else:
+                addr = input(f'  Email address for {user}: ').strip()
+                if addr:
+                    info['email'] = addr
+                    entry['email'] = addr
+                    changed = True
+
+    if changed:
+        save_config(config)
+        print('  [INFO] Contact info saved to telluric_config.yaml')
+
+
+def get_gmail_app_password():
+    """Retrieve the Gmail App Password from the macOS Keychain or ~/.gmail_app_password."""
+    try:
+        result = subprocess.run(
+            ['security', 'find-generic-password',
+             '-a', SENDER_EMAIL, '-s', 'gmail_app_password', '-w'],
+            capture_output=True, text=True,
+        )
+        if result.returncode == 0:
+            pw = result.stdout.strip()
+            if pw:
+                return pw
+    except FileNotFoundError:
+        pass
+    pw_file = os.path.expanduser('~/.gmail_app_password')
+    if os.path.exists(pw_file):
+        with open(pw_file) as fh:
+            return fh.read().strip()
+    return None
+
+
+def send_gmail(recipient_email, subject, body):
+    """Send an email via Gmail SMTP. Returns True on success, False on failure."""
+    app_password = get_gmail_app_password()
+    if not app_password:
+        print('  [ERROR] Gmail App Password not found — cannot send email.')
+        return False
+    msg = MIMEText(body, 'plain', 'utf-8')
+    msg['Subject'] = subject
+    msg['From'] = SENDER_EMAIL
+    msg['To'] = recipient_email
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(SENDER_EMAIL, app_password)
+            smtp.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
+        return True
+    except Exception as exc:
+        print(f'  [ERROR] Failed to send to {recipient_email}: {exc}')
+        return False
+
+
+def interactive_send_emails(email_blocks):
+    """Show a numbered menu of recipients and let the user choose whom to email."""
+    if not email_blocks:
+        print('No emails to send.')
+        return
+
+    print()
+    print('=' * 60)
+    print('SELECT RECIPIENTS TO EMAIL')
+    print('=' * 60)
+    for i, (user, name, addr, _subj, _body) in enumerate(email_blocks, 1):
+        display = name if name else user
+        addr_str = addr if addr else '(no email address)'
+        print(f'  {i:2d}.  {display:<30}  {addr_str}')
+    print()
+    print('Enter numbers separated by spaces (e.g. "1 3 5"), "all", or "none":')
+    raw = input('> ').strip().lower()
+
+    if raw == 'none' or raw == '':
+        print('No emails sent.')
+        return
+
+    if raw == 'all':
+        chosen = list(range(len(email_blocks)))
+    else:
+        chosen = []
+        for tok in raw.split():
+            try:
+                idx = int(tok) - 1
+                if 0 <= idx < len(email_blocks):
+                    chosen.append(idx)
+                else:
+                    print(f'  [WARN] Ignoring out-of-range number: {tok}')
+            except ValueError:
+                print(f'  [WARN] Ignoring invalid input: {tok}')
+
+    print()
+    for idx in chosen:
+        user, name, addr, subj, body = email_blocks[idx]
+        display = name if name else user
+        if not addr:
+            print(f'  [{display}] SKIP — no email address')
+            continue
+        print(f'  Sending to {display} <{addr}> … ', end='', flush=True)
+        ok = send_gmail(addr, subj, body)
+        print('OK' if ok else 'FAILED')
 
 
 def get_project_path(config):
@@ -258,18 +417,19 @@ def set_acl(basedir, user_dir, user, dry_run):
             break
 
 
-def build_email(user, targets, batch_name, basedir, instrument, missing, hostname=None):
-    """Return a formatted email string for a recipient."""
+def build_email(user, name, targets, batch_name, basedir, instrument, missing, hostname=None):
+    """Return a (subject, body) tuple for a recipient."""
     user_path = os.path.join(basedir, user)
     if hostname:
         rsync_cmd = f'rsync -avz {user}@{hostname}:{user_path}/ ./{user}/'
     else:
         rsync_cmd = f'rsync -avz <server>:{user_path}/ ./{user}/'
+
+    # Polite greeting using first name when available
+    first_name = name.split()[0] if name else user
+    subject = f'{instrument} telluric-corrected data available (batch {batch_name})'
     lines = [
-        f'=== Email to {user} ===',
-        f'Subject: {instrument} telluric-corrected data available (batch {batch_name})',
-        '',
-        f'Hi {user},',
+        f'Dear {first_name},',
         '',
         f'Your telluric-corrected {instrument} data for batch {batch_name} is now available at:',
         f'  {user_path}/',
@@ -288,18 +448,16 @@ def build_email(user, targets, batch_name, basedir, instrument, missing, hostnam
 
     if missing:
         lines.append('')
-        lines.append(f'Note: the following targets were attributed to you but had no data on disk:')
+        lines.append('Note: the following targets were attributed to you but had no data on disk:')
         for t in missing:
             lines.append(f'  - {t}')
 
     lines += [
         '',
-        'Best,',
+        'Best regards,',
         'Étienne',
-        '',
-        '-' * 60,
     ]
-    return '\n'.join(lines)
+    return subject, '\n'.join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -319,6 +477,10 @@ def main():
                         help='Show what would be copied without doing it')
     parser.add_argument('--email-only', action='store_true',
                         help='Only print email summaries, no copy/ACL')
+    parser.add_argument('--send-email', action='store_true',
+                        help='Interactive menu to send emails via Gmail SMTP')
+    parser.add_argument('--no-prompt', action='store_true',
+                        help='Skip interactive prompts for missing name/email')
     args = parser.parse_args()
 
     config = load_config()
@@ -327,16 +489,19 @@ def main():
     hostname = get_hostname(config)
     batch_name = config.get('batch', {}).get('name', 'unknown')
 
-    recipients = config.get('data_recipients', {})
-    if not recipients:
+    raw_recipients = config.get('data_recipients', {})
+    if not raw_recipients:
         print('No data_recipients defined in telluric_config.yaml. Nothing to do.')
         sys.exit(0)
 
     if args.user:
-        if args.user not in recipients:
+        if args.user not in raw_recipients:
             print(f'Error: user "{args.user}" not found in data_recipients.')
             sys.exit(1)
-        recipients = {args.user: recipients[args.user]}
+        raw_recipients = {args.user: raw_recipients[args.user]}
+
+    recipients = parse_recipients(raw_recipients)
+    prompt_missing_info(recipients, config, no_prompt=args.no_prompt)
 
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
     basedir = '/scratch/eartigau/datashare'
@@ -363,14 +528,17 @@ def main():
     email_blocks = []
     acl_pending = []  # [(user, user_dir)] — applied after all copies to avoid mask interference
 
-    for user, targets in sorted(recipients.items()):
+    for user, info in sorted(recipients.items()):
         user_dir = os.path.join(basedir, user)
+        targets = info['targets']
+        name = info['name']
         found_targets = []
         missing_targets = []
         total_files = 0
 
         if not args.email_only:
-            print(f'[{user}]')
+            label = f'{name} ({user})' if name else user
+            print(f'[{label}]')
 
         for target in targets:
             n_files, found = copy_target(
@@ -403,11 +571,11 @@ def main():
             print(f'  → {len(found_targets)} target(s), {total_files} file(s) total')
             print()
 
-        email_text = build_email(
-            user, found_targets, batch_name, basedir, instrument, missing_targets,
+        subject, body = build_email(
+            user, name, found_targets, batch_name, basedir, instrument, missing_targets,
             hostname=hostname,
         )
-        email_blocks.append((user, email_text))
+        email_blocks.append((user, name, info['email'], subject, body))
 
     # Apply ACLs after all copies are done to avoid mask interference between users
     for user, user_dir in acl_pending:
@@ -421,14 +589,23 @@ def main():
     print('\n' + '=' * 60)
     print('EMAIL SUMMARY')
     print('=' * 60 + '\n')
-    for user, block in email_blocks:
-        print(block)
+    for user, name, addr, subject, body in email_blocks:
+        display = f'{name} <{addr}>' if name and addr else (addr or user)
+        print(f'=== To: {display} ===')
+        print(f'Subject: {subject}')
+        print()
+        print(body)
+        print()
         if not args.dry_run:
             email_file = os.path.join(email_dir, f'{user}_{batch_name}.txt')
             os.makedirs(email_dir, exist_ok=True)
             with open(email_file, 'w') as fh:
-                fh.write(block + '\n')
+                fh.write(f'To: {display}\nSubject: {subject}\n\n{body}\n')
             print(f'  [email saved → {email_file}]')
+        print('-' * 60)
+
+    if args.send_email:
+        interactive_send_emails(email_blocks)
 
 
 if __name__ == '__main__':
