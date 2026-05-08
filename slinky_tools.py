@@ -272,11 +272,27 @@ def search_fits_with_mjd(search_string, mjdkey='MJDMID'):
         return np.array([]), np.array([])
     tprint(f'    Lecture des entêtes MJD : {len(files)} fichiers ({os.path.basename(search_string)})...', color='green')
     mjds = np.full(len(files), np.nan)
-    for i, f in enumerate(tqdm(files, leave=False, desc='MJD headers')):
+    warnings = []
+
+    def _read_mjd(args):
+        i, f = args
         try:
-            mjds[i] = fits.getheader(f)[mjdkey]
+            return i, fits.getheader(f)[mjdkey]
         except (OSError, KeyError):
-            tprint(f'    Avertissement : fichier ignoré (corrompu ou MJD absent) : {f}', color='yellow')
+            return i, None
+
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    n_workers = min(32, len(files))
+    with ThreadPoolExecutor(max_workers=n_workers) as executor:
+        futures = {executor.submit(_read_mjd, (i, f)): i for i, f in enumerate(files)}
+        for future in tqdm(as_completed(futures), total=len(files), leave=False, desc='MJD headers'):
+            i, val = future.result()
+            if val is None:
+                warnings.append(files[i])
+            else:
+                mjds[i] = val
+    for f in warnings:
+        tprint(f'    Avertissement : fichier ignoré (corrompu ou MJD absent) : {f}', color='yellow')
     valid = np.isfinite(mjds)
     files = np.array(files)[valid]
     mjds = mjds[valid]
