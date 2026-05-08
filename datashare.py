@@ -452,8 +452,8 @@ def set_acl(basedir, user_dir, user, dry_run):
     if dry_run:
         return
     for cmd in [
-        ['setfacl', '-m', f'u:{user}:rx', basedir],
-        ['setfacl', '-R', '-m', f'u:{user}:rx', user_dir],
+        ['setfacl', '-m', f'u:{user}:r-x', basedir],
+        ['setfacl', '-R', '-m', f'u:{user}:r-x', user_dir],
     ]:
         try:
             subprocess.run(cmd, check=True)
