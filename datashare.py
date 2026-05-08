@@ -29,7 +29,9 @@ Usage
 
 import argparse
 import csv
+import json
 import os
+from datetime import datetime
 import shutil
 import smtplib
 import subprocess
@@ -168,11 +170,31 @@ def send_gmail(recipient_email, subject, body):
         return False
 
 
+EMAIL_LOG_PATH = os.path.join(SCRIPT_DIR, 'email_log.json')
+
+
+def _load_email_log():
+    if os.path.exists(EMAIL_LOG_PATH):
+        try:
+            with open(EMAIL_LOG_PATH) as fh:
+                return json.load(fh)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_email_log(log):
+    with open(EMAIL_LOG_PATH, 'w') as fh:
+        json.dump(log, fh, indent=2)
+
+
 def interactive_send_emails(email_blocks):
     """Show a numbered menu of recipients and let the user choose whom to email."""
     if not email_blocks:
         print('No emails to send.')
         return
+
+    email_log = _load_email_log()
 
     print()
     print('=' * 60)
@@ -181,7 +203,9 @@ def interactive_send_emails(email_blocks):
     for i, (user, name, addr, _subj, _body) in enumerate(email_blocks, 1):
         display = name if name else user
         addr_str = addr if addr else '(no email address)'
-        print(f'  {i:2d}.  {display:<30}  {addr_str}')
+        last_sent = email_log.get(user)
+        note = '  [last sent: {}]'.format(last_sent) if last_sent else ''
+        print('  {:2d}.  {:<30}  {}{}'.format(i, display, addr_str, note))
     print()
     print('Enter numbers separated by spaces (e.g. "1 3 5"), "all", or "none":')
     raw = input('> ').strip().lower()
@@ -209,11 +233,14 @@ def interactive_send_emails(email_blocks):
         user, name, addr, subj, body = email_blocks[idx]
         display = name if name else user
         if not addr:
-            print(f'  [{display}] SKIP — no email address')
+            print('  [{}] SKIP — no email address'.format(display))
             continue
-        print(f'  Sending to {display} <{addr}> … ', end='', flush=True)
+        print('  Sending to {} <{}> … '.format(display, addr), end='', flush=True)
         ok = send_gmail(addr, subj, body)
         print('OK' if ok else 'FAILED')
+        if ok:
+            email_log[user] = datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')
+    _save_email_log(email_log)
 
 
 def get_project_path(config):
