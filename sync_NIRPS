@@ -90,7 +90,8 @@ echo "[2/3] Loading science_targets from telluric_config.yaml..."
 SCIENCE_TARGETS=($($PYTHON -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
-print(' '.join(cfg.get('science_targets', [])))
+targets = sorted({t for info in cfg.get('data_recipients', {}).values() for t in (info if isinstance(info, list) else info.get('targets', []))})
+print(' '.join(targets))
 "))
 
 if [ ${#SCIENCE_TARGETS[@]} -eq 0 ]; then
