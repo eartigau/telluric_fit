@@ -488,9 +488,7 @@ def build_email(user, name, targets, batch_name, basedir, instrument, missing, h
     ]
 
     if targets:
-        lines.append(f'Targets ({len(targets)}):')
-        for t in targets:
-            lines.append(f'  - {t}')
+        lines.append('{} target(s): {}'.format(len(targets), ', '.join(targets)))
     else:
         lines.append('No targets were found on disk for you in this batch.')
 
