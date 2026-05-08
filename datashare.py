@@ -438,9 +438,9 @@ def build_email(user, name, targets, batch_name, basedir, instrument, missing, h
     """Return a (subject, body) tuple for a recipient."""
     user_path = os.path.join(basedir, user)
     if hostname:
-        rsync_cmd = f'rsync -avz {user}@{hostname}:{user_path}/ ./{user}/'
+        rsync_cmd = f'rsync -avz {user}@{hostname}:{user_path}/ ./data_from_fir/'
     else:
-        rsync_cmd = f'rsync -avz <server>:{user_path}/ ./{user}/'
+        rsync_cmd = f'rsync -avz <server>:{user_path}/ ./data_from_fir/'
 
     # Polite greeting using first name when available
     first_name = name.split()[0] if name else user
