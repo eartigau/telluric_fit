@@ -41,6 +41,7 @@ import argparse
 import yaml
 import sys
 from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
+import multiprocessing as _mp
 from functools import partial
 
 # Coding errors (deprecated APIs, future incompatibilities) should crash immediately
@@ -1193,9 +1194,9 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
             for file in pending_files
         ]
         
-        # Use ProcessPoolExecutor with timeout; kill + retry on hang
-        TASK_TIMEOUT = 60   # seconds with no completion before killing + retrying
-        MAX_RETRIES   = 3   # give up on a task after this many pool restarts
+        # Use Pool.apply_async + terminate() so we can actually kill hung workers
+        TASK_TIMEOUT = 60   # seconds with no progress before killing + retrying
+        MAX_RETRIES   = 3
         start_time_par = time.time()
         n_total_par = len(args_list)
         n_done = 0
@@ -1203,38 +1204,55 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         remaining_args = list(enumerate(args_list))  # (idx, arg)
 
         while remaining_args:
-            with ProcessPoolExecutor(max_workers=n_cores) as executor:
-                future_to_idx = {executor.submit(_pa_wrapper, arg): idx
-                                 for idx, arg in remaining_args}
-                pending = set(future_to_idx)
+            pool = _mp.Pool(processes=n_cores)
+            try:
+                async_results = [(idx, arg, pool.apply_async(_pa_wrapper, (arg,)))
+                                 for idx, arg in remaining_args]
+                pool.close()
+
+                deadline = time.time() + TASK_TIMEOUT
                 completed_this_round = set()
                 hung = False
-                while pending:
-                    done, pending = wait(pending, timeout=TASK_TIMEOUT, return_when=FIRST_COMPLETED)
-                    if not done:
-                        tprint(f'WARNING: no task completed in {TASK_TIMEOUT}s — killing pool '
-                               f'and retrying {len(pending)} tasks.', color='red')
-                        for f in pending:
-                            f.cancel()
-                        hung = True
-                        break
-                    for future in done:
-                        completed_this_round.add(future_to_idx[future])
-                        n_done += 1
+
+                while len(completed_this_round) < len(async_results):
+                    for idx, arg, r in async_results:
+                        if idx in completed_this_round:
+                            continue
                         try:
-                            result = future.result()
+                            result = r.get(timeout=0)
+                            completed_this_round.add(idx)
+                            n_done += 1
+                            if result:
+                                n_processed += 1
+                            else:
+                                n_skipped += 1
+                            elapsed = time.time() - start_time_par
+                            remaining_count = n_total_par - n_done
+                            mean_dur = elapsed / n_done if n_done else 0
+                            eta_str = format_eta(remaining_count * mean_dur) if remaining_count > 0 else 'done'
+                            tprint(f'[{n_done}/{n_total_par}] done so far | ETA ~ {eta_str}', color='cyan')
+                            deadline = time.time() + TASK_TIMEOUT  # reset on progress
+                        except _mp.TimeoutError:
+                            pass
                         except Exception as exc:
                             tprint(f'Worker raised exception: {exc}', color='red')
-                            result = False
-                        if result:
-                            n_processed += 1
-                        else:
+                            completed_this_round.add(idx)
                             n_skipped += 1
-                        elapsed = time.time() - start_time_par
-                        remaining_count = n_total_par - n_done
-                        mean_dur = elapsed / n_done if n_done else 0
-                        eta_str = format_eta(remaining_count * mean_dur) if remaining_count > 0 else 'done'
-                        tprint(f'[{n_done}/{n_total_par}] done so far | ETA ~ {eta_str}', color='cyan')
+                            n_done += 1
+                            deadline = time.time() + TASK_TIMEOUT
+                    if len(completed_this_round) == len(async_results):
+                        break
+                    if time.time() > deadline:
+                        tprint(f'WARNING: no progress in {TASK_TIMEOUT}s — terminating pool '
+                               f'and retrying {len(async_results) - len(completed_this_round)} tasks.',
+                               color='red')
+                        hung = True
+                        break
+                    time.sleep(0.2)
+            finally:
+                if hung:
+                    pool.terminate()
+                pool.join()
 
             remaining_args = [(idx, arg) for idx, arg in remaining_args
                               if idx not in completed_this_round]
@@ -1247,7 +1265,8 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
             for idx, arg in remaining_args:
                 retry_counts[idx] = retry_counts.get(idx, 0) + 1
                 if retry_counts[idx] >= MAX_RETRIES:
-                    tprint(f'Task {idx} failed {MAX_RETRIES} times in parallel — running serially.', color='red')
+                    tprint(f'Task {idx} failed {MAX_RETRIES} times in parallel — running serially.',
+                           color='red')
                     serial_fallback.append(arg)
                 else:
                     next_remaining.append((idx, arg))
