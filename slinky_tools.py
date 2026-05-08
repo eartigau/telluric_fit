@@ -915,6 +915,9 @@ def padding_wavesol(params, science_files=None):
 
     tprint(f'[SLINKY] Padding {len(science_files)} science files with slinky wavesol', color='green')
 
+    # Pre-build a set of already-existing output filenames (one glob, O(1) lookup)
+    existing_outputs = set(os.path.basename(f) for f in glob.glob(os.path.join(output_dir, '*_slinky.fits')))
+
     for ifile, file in enumerate(science_files):
         try:
             tprint(f'  Padding {ifile+1}/{len(science_files)}: {os.path.basename(file)}', color='green')
@@ -937,7 +940,7 @@ def padding_wavesol(params, science_files=None):
             outname_slinky = os.path.join(output_dir,
                                           basename.replace('.fits', '_slinky.fits'))
 
-            if os.path.exists(outname_slinky):
+            if os.path.basename(outname_slinky) in existing_outputs:
                 tprint(f'    Already exists, skipping', color='yellow')
                 continue
 

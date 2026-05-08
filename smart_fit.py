@@ -30,7 +30,7 @@ from aperocore import math as mp
 from aperocore.science import wavecore
 import sys
 import time
-from multiprocessing import Pool
+from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
 
 # Coding errors (deprecated APIs, future incompatibilities) should crash immediately
 # rather than silently producing NaN-filled outputs.
@@ -641,19 +641,34 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
             for file, outname in pending_files
         ]
         
+        TASK_TIMEOUT = 60  # seconds; raise alarm if no task completes within this window
         durations_par = []
-        with Pool(processes=n_cores) as pool:
-            for n_done, result in enumerate(pool.imap_unordered(_process_wrapper, args_list), start=1):
-                if result:
-                    n_processed += 1
-                else:
-                    n_skipped += 1
-                elapsed = time.perf_counter() - start_time
-                durations_par.append(elapsed / n_done)
-                remaining = N_pending - n_done
-                mean_dur = elapsed / n_done
-                eta_str = format_eta(remaining * mean_dur) if remaining > 0 else 'done'
-                tprint(f'[{n_done}/{N_pending}] done so far | ETA ~ {eta_str}', color='cyan')
+        n_done = 0
+        with ProcessPoolExecutor(max_workers=n_cores) as executor:
+            pending = {executor.submit(_process_wrapper, a): a for a in args_list}
+            while pending:
+                done, pending = wait(pending, timeout=TASK_TIMEOUT, return_when=FIRST_COMPLETED)
+                if not done:
+                    tprint(f'WARNING: no task completed in {TASK_TIMEOUT}s — possible hang. '
+                           f'{len(pending)} tasks still pending.', color='red')
+                    break
+                for future in done:
+                    n_done += 1
+                    try:
+                        result = future.result()
+                    except Exception as exc:
+                        tprint(f'Worker raised exception: {exc}', color='red')
+                        result = False
+                    if result:
+                        n_processed += 1
+                    else:
+                        n_skipped += 1
+                    elapsed = time.perf_counter() - start_time
+                    durations_par.append(elapsed / n_done)
+                    remaining = N_pending - n_done
+                    mean_dur = elapsed / n_done
+                    eta_str = format_eta(remaining * mean_dur) if remaining > 0 else 'done'
+                    tprint(f'[{n_done}/{N_pending}] done so far | ETA ~ {eta_str}', color='cyan')
         
     else:
         # Serial processing
