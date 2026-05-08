@@ -641,34 +641,77 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
             for file, outname in pending_files
         ]
         
-        TASK_TIMEOUT = 60  # seconds; raise alarm if no task completes within this window
+        TASK_TIMEOUT = 60   # seconds with no completion before killing + retrying
+        MAX_RETRIES   = 3    # give up on a task after this many pool restarts
         durations_par = []
         n_done = 0
-        with ProcessPoolExecutor(max_workers=n_cores) as executor:
-            pending = {executor.submit(_process_wrapper, a): a for a in args_list}
-            while pending:
-                done, pending = wait(pending, timeout=TASK_TIMEOUT, return_when=FIRST_COMPLETED)
-                if not done:
-                    tprint(f'WARNING: no task completed in {TASK_TIMEOUT}s — possible hang. '
-                           f'{len(pending)} tasks still pending.', color='red')
-                    break
-                for future in done:
-                    n_done += 1
-                    try:
-                        result = future.result()
-                    except Exception as exc:
-                        tprint(f'Worker raised exception: {exc}', color='red')
-                        result = False
-                    if result:
-                        n_processed += 1
-                    else:
-                        n_skipped += 1
-                    elapsed = time.perf_counter() - start_time
-                    durations_par.append(elapsed / n_done)
-                    remaining = N_pending - n_done
-                    mean_dur = elapsed / n_done
-                    eta_str = format_eta(remaining * mean_dur) if remaining > 0 else 'done'
-                    tprint(f'[{n_done}/{N_pending}] done so far | ETA ~ {eta_str}', color='cyan')
+        retry_counts = {}    # arg index -> number of retries so far
+        remaining_args = list(enumerate(args_list))  # (idx, arg)
+
+        while remaining_args:
+            with ProcessPoolExecutor(max_workers=n_cores) as executor:
+                future_to_idx = {executor.submit(_process_wrapper, arg): idx
+                                 for idx, arg in remaining_args}
+                pending = set(future_to_idx)
+                completed_this_round = set()
+                hung = False
+                while pending:
+                    done, pending = wait(pending, timeout=TASK_TIMEOUT, return_when=FIRST_COMPLETED)
+                    if not done:
+                        tprint(f'WARNING: no task completed in {TASK_TIMEOUT}s — killing pool '
+                               f'and retrying {len(pending)} tasks.', color='red')
+                        for f in pending:
+                            f.cancel()
+                        hung = True
+                        break
+                    for future in done:
+                        completed_this_round.add(future_to_idx[future])
+                        n_done += 1
+                        try:
+                            result = future.result()
+                        except Exception as exc:
+                            tprint(f'Worker raised exception: {exc}', color='red')
+                            result = False
+                        if result:
+                            n_processed += 1
+                        else:
+                            n_skipped += 1
+                        elapsed = time.perf_counter() - start_time
+                        durations_par.append(elapsed / n_done)
+                        remaining_count = N_pending - n_done
+                        mean_dur = elapsed / n_done
+                        eta_str = format_eta(remaining_count * mean_dur) if remaining_count > 0 else 'done'
+                        tprint(f'[{n_done}/{N_pending}] done so far | ETA ~ {eta_str}', color='cyan')
+
+            # Remove successfully completed tasks
+            remaining_args = [(idx, arg) for idx, arg in remaining_args
+                              if idx not in completed_this_round]
+
+            if not hung:
+                break  # all done normally
+
+            # Increment retry counters; fall back to serial for exhausted tasks
+            serial_fallback = []
+            next_remaining = []
+            for idx, arg in remaining_args:
+                retry_counts[idx] = retry_counts.get(idx, 0) + 1
+                if retry_counts[idx] >= MAX_RETRIES:
+                    tprint(f'Task {idx} failed {MAX_RETRIES} times in parallel — running serially.', color='red')
+                    serial_fallback.append(arg)
+                else:
+                    next_remaining.append((idx, arg))
+            for arg in serial_fallback:
+                try:
+                    result = _process_wrapper(arg)
+                except Exception as exc:
+                    tprint(f'Serial fallback raised: {exc}', color='red')
+                    result = False
+                if result:
+                    n_processed += 1
+                else:
+                    n_skipped += 1
+                n_done += 1
+            remaining_args = next_remaining
         
     else:
         # Serial processing
