@@ -511,22 +511,99 @@ if __name__ == '__main__':
 
     tbl0_dict = {col: np.array(tbl0[col]) for col in tbl0.colnames}
 
+    # Cache invalidation: if any trans_*.fits is newer than an order's output files,
+    # recompute that order. This means adding hot stars automatically triggers recompute.
+    newest_trans_mtime = max(os.path.getmtime(f) for f in files) if files else 0
+
+    def _order_cache_valid(iord):
+        """Return True if all 4 output files exist and are newer than newest trans file."""
+        out_files = [
+            os.path.join(residuals_dir, f'residuals_order_{iord:02d}_slope.fits'),
+            os.path.join(residuals_dir, f'residuals_order_{iord:02d}_intercept.fits'),
+            os.path.join(residuals_dir, f'residuals_order_{iord:02d}_rms.fits'),
+            os.path.join(residuals_dir, f'residuals_order_{iord:02d}_rms_envelope.fits'),
+        ]
+        return all(os.path.exists(f) and os.path.getmtime(f) > newest_trans_mtime
+                   for f in out_files)
+
+    def _load_order_from_cache(iord):
+        """Load pre-computed order results from disk."""
+        residuals_dir_local = os.path.join(project_path, f'residuals_{instrument}')
+        slope    = fits.getdata(os.path.join(residuals_dir_local, f'residuals_order_{iord:02d}_slope.fits'))
+        intercept= fits.getdata(os.path.join(residuals_dir_local, f'residuals_order_{iord:02d}_intercept.fits'))
+        rms      = fits.getdata(os.path.join(residuals_dir_local, f'residuals_order_{iord:02d}_rms.fits'))
+        rms_env  = fits.getdata(os.path.join(residuals_dir_local, f'residuals_order_{iord:02d}_rms_envelope.fits'))
+        return {'iord': iord, 'slope_offset': slope, 'dc_offset': intercept,
+                'rms': rms, 'rms_envelope': rms_env, 'residuals': None, 'tbl': None}
+
+    n_cached = sum(1 for iord in range(waveref.shape[0]) if _order_cache_valid(iord))
     n_orders = waveref.shape[0]
+    if n_cached > 0:
+        print(f'  {n_cached}/{n_orders} orders already cached (newer than newest trans file) — skipping those.')
+
+    orders_to_compute = [iord for iord in range(n_orders) if not _order_cache_valid(iord)]
+
+    # -------------------------------------------------------------------------
+    # Transposition pass: read each file ONCE, write all orders to a memmap.
+    # This avoids reading 8978 files × 75 times; instead: 8978 × 1 read.
+    # The memmap (n_orders, n_files, n_pix) lives on disk so memory stays low.
+    # -------------------------------------------------------------------------
+    n_pix = waveref.shape[1]
+    n_files = len(files)
+    memmap_path = os.path.join(residuals_dir, f'transposed_data_{instrument}.npy')
+    memmap_valid = (
+        os.path.exists(memmap_path)
+        and os.path.getmtime(memmap_path) > newest_trans_mtime
+    )
+
+    if orders_to_compute and not memmap_valid:
+        print(f'Transposition pass: reading {n_files} files once to build order-major memmap...')
+        mm = np.lib.format.open_memmap(
+            memmap_path, mode='w+', dtype='float32',
+            shape=(n_orders, n_files, n_pix)
+        )
+        def _read_full_file(ifile_and_path):
+            ifile, path = ifile_and_path
+            data = getdata_safe(path)   # shape (n_orders, n_pix)
+            return ifile, data
+
+        t_mm = time.time()
+        with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
+            fut_map = {executor.submit(_read_full_file, (i, f)): i
+                       for i, f in enumerate(files)}
+            for j, future in enumerate(tqdm(as_completed(fut_map), total=n_files,
+                                            desc='Reading files', unit='file',
+                                            bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]')):
+                ifile, data = future.result()
+                mm[:, ifile, :] = data.astype('float32')
+        mm.flush()
+        print(f'  Transposition done in {time.time()-t_mm:.1f}s')
+    elif orders_to_compute:
+        print(f'Re-using existing transposed memmap (newer than trans files).')
+        mm = np.lib.format.open_memmap(memmap_path, mode='r',
+                                        dtype='float32', shape=(n_orders, n_files, n_pix))
+    else:
+        mm = None  # all orders cached, memmap not needed
+
+
     print(f'Processing {n_orders} orders (loading one order at a time to save memory)...')
 
     order_results = []
     t0_orders = time.time()
     for iord in tqdm(range(n_orders), desc='Processing orders', unit='order',
                      bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}]'):
-        # Load this order from all files in parallel (shape: n_files x n_pix)
-        order_data = np.zeros((len(files), waveref.shape[1]))
-        order_file_args = [(f, iord) for f in files]
-        with ThreadPoolExecutor(max_workers=N_WORKERS) as executor:
-            future_to_idx = {executor.submit(_load_order_from_file, args): i
-                             for i, args in enumerate(order_file_args)}
-            for future in as_completed(future_to_idx):
-                idx = future_to_idx[future]
-                order_data[idx] = future.result()
+
+        if _order_cache_valid(iord):
+            result = _load_order_from_cache(iord)
+            order_results.append(result)
+            map_slopes[iord, :]       = result['slope_offset']
+            map_intercepts[iord, :]   = result['dc_offset']
+            map_rms[iord, :]          = result['rms']
+            map_rms_envelope[iord, :] = result['rms_envelope']
+            continue
+
+        # Load this order from the memmap (one row — already in memory-mapped file)
+        order_data = np.array(mm[iord, :, :], dtype='float64')  # shape (n_files, n_pix)
 
         # _process_single_order expects order_data shaped (n_pix, n_files)
         args = (
