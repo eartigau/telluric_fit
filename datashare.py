@@ -412,9 +412,7 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name, cache=None)
         os.makedirs(dst_target, exist_ok=True)
         n_copied = 0
         n_skipped = 0
-        with tqdm(files, desc=target, unit='file', leave=False,
-                  bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, copied={postfix[copied]}, skip={postfix[skip]}]',
-                  postfix={'copied': 0, 'skip': 0}) as pbar:
+        with tqdm(files, desc=target, unit='file', leave=False) as pbar:
             for fpath in pbar:
                 rel = os.path.relpath(fpath, src_target)
                 dst = os.path.join(dst_target, rel)
@@ -426,8 +424,7 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name, cache=None)
                     n_copied += 1
                 else:
                     n_skipped += 1
-                pbar.postfix['copied'] = n_copied
-                pbar.postfix['skip'] = n_skipped
+                pbar.set_postfix(copied=n_copied, skip=n_skipped)
     return n_total, True
 
 
