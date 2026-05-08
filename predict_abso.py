@@ -1361,13 +1361,17 @@ if __name__ == '__main__':
             batch_name = config.get('batch_name', 'skypca_v5')
         instrument = config.get('instrument', 'NIRPS')
         template_style = config.get('template_style', 'model')
-        objects = config.get('science_targets', [])
-        
+        objects = sorted({
+            t
+            for info in config.get('data_recipients', {}).values()
+            for t in (info if isinstance(info, list) else info.get('targets', []))
+        })
+
         if not objects:
-            tprint("ERROR: No science_targets specified in config file", color='red')
+            tprint("ERROR: No targets found in data_recipients in config file", color='red')
             sys.exit(1)
-        
-        # Process each object in science_targets
+
+        # Process each object derived from data_recipients
         for obj_name in objects:
             tprint(f"Processing {obj_name} with {template_style} template", color='cyan')
             main(
@@ -1384,14 +1388,18 @@ if __name__ == '__main__':
             # Explicit single-object run
             objects_to_run = [args.object]
         else:
-            # No --object given: use science_targets from telluric_config.yaml
+            # No --object given: derive targets from data_recipients in telluric_config.yaml
             telluric_cfg = tt.load_telluric_config()
-            objects_to_run = telluric_cfg.get('science_targets', [])
+            objects_to_run = sorted({
+                t
+                for info in telluric_cfg.get('data_recipients', {}).values()
+                for t in (info if isinstance(info, list) else info.get('targets', []))
+            })
             if not objects_to_run:
-                tprint("ERROR: No --object given and no science_targets in telluric_config.yaml",
+                tprint("ERROR: No --object given and no targets in data_recipients in telluric_config.yaml",
                        color='red')
                 sys.exit(1)
-            tprint(f"Using science_targets from telluric_config.yaml: {objects_to_run}",
+            tprint(f"Using targets from data_recipients in telluric_config.yaml: {objects_to_run}",
                    color='cyan')
 
         for obj_name in objects_to_run:

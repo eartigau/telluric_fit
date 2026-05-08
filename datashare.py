@@ -46,6 +46,21 @@ SENDER_EMAIL = 'etienne.artigau@gmail.com'
 # Config helpers
 # ---------------------------------------------------------------------------
 
+def get_science_targets(config):
+    """Return the sorted unique list of science targets from all data_recipients.
+
+    Replaces the legacy top-level 'science_targets' key in the yaml.
+    """
+    raw = config.get('data_recipients', {})
+    targets = set()
+    for value in raw.values():
+        if isinstance(value, list):
+            targets.update(value)
+        elif isinstance(value, dict):
+            targets.update(value.get('targets', []))
+    return sorted(targets)
+
+
 def load_config():
     with open(CFG_PATH) as fh:
         return yaml.safe_load(fh)

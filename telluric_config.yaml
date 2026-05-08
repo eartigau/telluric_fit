@@ -58,67 +58,9 @@ hot_stars:
   - ZETLEP
   - ZETVIR
 
-# Science targets to process through the full pipeline
-# (telluric correction in predict_abso.py, slinky wavelength correction, etc.)
-# Analogous to hot_stars above: add one name per line.
-science_targets:
-  - PROXIMA
-  - TOI270
-  - TOI782
-  - GJ1
-  - GJ717
-  - GJ3307
-  - GL406
-  - L230M188
-  - SCR_J1546M5534
-  - TIC304392811
-  - LP_851M346
-  - GJ_1028
-  - LP885M35
-  - DENIS_J104814_6M395606
-  - SIPS_J1259M4336
-  - LP_500M35
-  - GJ3252
-  - GJ3693
-  - GL299
-  - NLTT5556
-  - GJ3622
-  - LP888M18
-  - TEEGARDENS_STAR
-  - LP_938M71
-  - GJ3618
-  - LP_783M2
-  - TOI3494
-  - WASP193
-  - BPS_CS_22881M0003
-  - TIC151584725
-  - TIC427346731
-  - SMETHELLS_20
-  - GJ643
-  - YZ_CMI
-  - NGC2345NO50
-  - NGC2423NO3
-  - NGC3114NO223
-  - NGC3114NO6
-  - NGC3114NO283
-  - NGC3532NO649
-  - NGC3532NO221
-  - NGC3532NO670
-  - NGC3680NO34
-  - NGC3680NO26
-  - NGC3680NO41
-  - NGC3680NO53
-  - NGC4349NO127
-  - NGC5822NO375
-  - IC4651NO9122
-  - IC4756NO52
-  - TOI904
-  - HD50281
-  - HD50281B
-  - GL297_2A
-  - GL297_2B
-  - GL166C
-
+# Science targets to process through the full pipeline.
+# Derived automatically from the union of all targets in data_recipients below.
+# (no need to maintain this list separately)
 
 
 # Data sharing: maps each recipient username to their name, email and targets.
@@ -230,6 +172,15 @@ data_recipients:
     targets:
       - GJ643
       - YZ_CMI
+
+  yfrensch:
+    name: Yolanda Frensch
+    email: yolanda.frensch@astro.up.pt
+    targets:
+      - TOI2952
+      - TOI3397
+      - GL514
+      - GJ2066
 
 #acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
 

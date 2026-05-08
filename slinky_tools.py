@@ -130,7 +130,11 @@ def _get_slinky_params(config):
         'output_slinky': os.path.join(project_path, f'slinky_{instrument}_output'),
         'plot_folder': os.path.join(project_path, f'slinky_{instrument}_plots'),
         'hot_stars': config.get('hot_stars', []),
-        'science_targets': config.get('science_targets', []),
+        'science_targets': sorted({
+            t
+            for info in config.get('data_recipients', {}).values()
+            for t in (info if isinstance(info, list) else info.get('targets', []))
+        }),
         'wave_leverage': slinky_cfg.get('wave_leverage', 1600),
         'wslinky': slinky_cfg.get('wslinky', 1e-1),
     }

@@ -156,7 +156,11 @@ def run_telluric(objects, instrument, batch_name, template_style, force_recomput
 def main():
     cfg = _load_telluric_config()
     default_instrument = cfg.get('instrument', 'NIRPS').upper()
-    default_targets = cfg.get('science_targets', [])
+    default_targets = sorted({
+        t
+        for info in cfg.get('data_recipients', {}).values()
+        for t in (info if isinstance(info, list) else info.get('targets', []))
+    })
     default_template = cfg.get('template_style', 'model')
 
     # Read batch name from telluric_config.yaml
@@ -215,7 +219,7 @@ def main():
     objects = [args.object] if args.object else default_targets
 
     if not objects:
-        print('ERROR: no object specified and science_targets is empty in telluric_config.yaml.')
+        print('ERROR: no object specified and data_recipients is empty in telluric_config.yaml.')
         sys.exit(1)
 
     t0 = time.time()
