@@ -489,11 +489,24 @@ def _recipients_epilog():
         return ''
     header = '  {:<12}  {:<25}  {:<40}  Targets'.format('User', 'Name', 'Email')
     lines = ['', 'Recipients:', header, '  ' + '-' * 106]
+    first_user = None
     for user, info in sorted(parsed.items()):
+        if first_user is None:
+            first_user = user
         name    = info.get('name')  or '(missing)'
         email   = info.get('email') or '(missing)'
         targets = ', '.join(info.get('targets', []))
         lines.append('  {:<12}  {:<25}  {:<40}  {}'.format(user, name, email, targets))
+    if first_user:
+        lines += [
+            '',
+            'Examples:',
+            '  python datashare.py                        # copy data for all recipients',
+            '  python datashare.py --user {}    # copy data for one recipient'.format(first_user),
+            '  python datashare.py --user {} --send-email # copy + send email'.format(first_user),
+            '  python datashare.py --send-email           # interactive menu to send emails',
+            '  python datashare.py --dry-run              # preview without copying',
+        ]
     return '\n'.join(lines)
 
 
