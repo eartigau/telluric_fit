@@ -480,9 +480,27 @@ def build_email(user, name, targets, batch_name, basedir, instrument, missing, h
 # Main
 # ---------------------------------------------------------------------------
 
+def _recipients_epilog():
+    """Build a recipients table string for the argparse epilog."""
+    try:
+        config = load_config()
+        parsed = parse_recipients(config.get('data_recipients', {}))
+    except Exception:
+        return ''
+    header = '  {:<12}  {:<25}  {:<40}  Targets'.format('User', 'Name', 'Email')
+    lines = ['', 'Recipients:', header, '  ' + '-' * 106]
+    for user, info in sorted(parsed.items()):
+        name    = info.get('name')  or '(missing)'
+        email   = info.get('email') or '(missing)'
+        targets = ', '.join(info.get('targets', []))
+        lines.append('  {:<12}  {:<25}  {:<40}  {}'.format(user, name, email, targets))
+    return '\n'.join(lines)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Share telluric-corrected data with collaborators.',
+        epilog=_recipients_epilog(),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument('--instrument', default=None,
@@ -506,13 +524,13 @@ def main():
     if args.list_recipients:
         raw = config.get('data_recipients', {})
         parsed = parse_recipients(raw)
-        print(f'{'User':<12}  {'Name':<25}  {'Email':<40}  Targets')
+        print('{:<12}  {:<25}  {:<40}  Targets'.format('User', 'Name', 'Email'))
         print('-' * 110)
         for user, info in sorted(parsed.items()):
             name  = info.get('name')  or '(missing)'
             email = info.get('email') or '(missing)'
             targets = ', '.join(info.get('targets', []))
-            print(f'{user:<12}  {name:<25}  {email:<40}  {targets}')
+            print('{:<12}  {:<25}  {:<40}  {}'.format(user, name, email, targets))
         sys.exit(0)
 
     instrument = (args.instrument or config.get('instrument', 'NIRPS')).upper()
