@@ -38,6 +38,7 @@ import subprocess
 import sys
 from email.mime.text import MIMEText
 import yaml
+from tqdm import tqdm
 from astropy.io import fits
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -409,18 +410,24 @@ def copy_target(src_dir, target, dest_user_dir, dry_run, batch_name, cache=None)
     n_total = len(files)
     if not dry_run:
         os.makedirs(dst_target, exist_ok=True)
-        for i, fpath in enumerate(files, 1):
-            rel = os.path.relpath(fpath, src_target)
-            dst = os.path.join(dst_target, rel)
-            os.makedirs(os.path.dirname(dst), exist_ok=True)
-            if needs_copy(fpath, dst, cache):
-                print(f'    [{i}/{n_total}] {rel}', flush=True)
-                shutil.copy2(fpath, dst)
-                # update cache for the freshly written destination
-                if cache is not None:
-                    fits_checksum(dst, cache)
-            else:
-                print(f'    [{i}/{n_total}] {rel}  [skip — checksum match]', flush=True)
+        n_copied = 0
+        n_skipped = 0
+        with tqdm(files, desc=target, unit='file', leave=False,
+                  bar_format='{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}, copied={postfix[copied]}, skip={postfix[skip]}]',
+                  postfix={'copied': 0, 'skip': 0}) as pbar:
+            for fpath in pbar:
+                rel = os.path.relpath(fpath, src_target)
+                dst = os.path.join(dst_target, rel)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                if needs_copy(fpath, dst, cache):
+                    shutil.copy2(fpath, dst)
+                    if cache is not None:
+                        fits_checksum(dst, cache)
+                    n_copied += 1
+                else:
+                    n_skipped += 1
+                pbar.postfix['copied'] = n_copied
+                pbar.postfix['skip'] = n_skipped
     return n_total, True
 
 
