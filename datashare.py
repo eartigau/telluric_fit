@@ -2,8 +2,9 @@
 datashare.py — Share telluric-corrected data with collaborators.
 
 Reads data_recipients from telluric_config.yaml, copies the relevant
-tellupatched files to /scratch/eartigau/datashare/<user>/, sets ACL
-permissions with setfacl, writes per-user email files, and prints a summary.
+tellupatched files to ./data_dir/<user>/ (or the path set by datashare_dir
+in the yaml), sets ACL permissions with setfacl, writes per-user email
+files, and prints a summary.
 
 Each recipient in data_recipients may use the legacy list form (list of
 targets) or the new dict form with 'email' and 'targets' keys.  If an email
@@ -566,7 +567,7 @@ def main():
     prompt_missing_info(recipients, config, no_prompt=args.no_prompt)
 
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
-    basedir = '/scratch/eartigau/datashare'
+    basedir = config.get('datashare_dir', os.path.join(SCRIPT_DIR, 'data_dir'))
 
     if not args.dry_run and not args.email_only:
         os.makedirs(basedir, exist_ok=True)
