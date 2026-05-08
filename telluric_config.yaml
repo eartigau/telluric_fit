@@ -104,6 +104,7 @@ data_recipients:
     targets:
       - PROXIMA
       - GJ1
+      - GJ699
   allart:
     name: Romain Allart
     email: romain.allart@umontreal.ca

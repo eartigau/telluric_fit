@@ -23,6 +23,7 @@ Usage
     python datashare.py --send-email        # interactive menu to send emails via Gmail
     python datashare.py --instrument SPIROU # override instrument
     python datashare.py --no-prompt         # skip interactive email-address prompts
+    python datashare.py --list-recipients   # list all recipients with name, email and targets
 """
 
 import argparse
@@ -496,9 +497,24 @@ def main():
                         help='Interactive menu to send emails via Gmail SMTP')
     parser.add_argument('--no-prompt', action='store_true',
                         help='Skip interactive prompts for missing name/email')
+    parser.add_argument('--list-recipients', action='store_true',
+                        help='List all recipients with name, email and targets, then exit')
     args = parser.parse_args()
 
     config = load_config()
+
+    if args.list_recipients:
+        raw = config.get('data_recipients', {})
+        parsed = parse_recipients(raw)
+        print(f'{'User':<12}  {'Name':<25}  {'Email':<40}  Targets')
+        print('-' * 110)
+        for user, info in sorted(parsed.items()):
+            name  = info.get('name')  or '(missing)'
+            email = info.get('email') or '(missing)'
+            targets = ', '.join(info.get('targets', []))
+            print(f'{user:<12}  {name:<25}  {email:<40}  {targets}')
+        sys.exit(0)
+
     instrument = (args.instrument or config.get('instrument', 'NIRPS')).upper()
     project_path = get_project_path(config)
     hostname = get_hostname(config)
