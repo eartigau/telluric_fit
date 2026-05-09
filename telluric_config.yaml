@@ -104,7 +104,7 @@ data_recipients:
     targets:
       - PROXIMA
       - GJ1
-      - GJ699
+      - GL699
       - GJ3618
   allart:
     name: Romain Allart
