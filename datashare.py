@@ -417,6 +417,31 @@ def get_hostname(config):
     return None
 
 
+def get_datashare_dir(config):
+    """Return the datashare root directory for the current machine.
+
+    Looks up 'datashare_dir' in the matching machines entry first (preferred,
+    since each machine may share data from a different path, e.g.
+    /scratch/eartigau/datashare on FIR).  Falls back to the top-level
+    'datashare_dir' key, then to ./data_dir/ next to this script.
+
+    With the current config the resolved path on FIR is:
+        /scratch/eartigau/datashare/
+    and per-user subdirectories are:
+        /scratch/eartigau/datashare/{username}/
+    """
+    machines = config.get('machines', {})
+    for _name, mcfg in machines.items():
+        detect = mcfg.get('detect_path', '')
+        if detect and os.path.exists(detect):
+            machine_dir = mcfg.get('datashare_dir')
+            if machine_dir:
+                return machine_dir
+            break  # matched machine but no datashare_dir key — fall through
+    # Fall back to top-level key, then script-local data_dir/
+    return config.get('datashare_dir', os.path.join(SCRIPT_DIR, 'data_dir'))
+
+
 # ---------------------------------------------------------------------------
 # Checksum cache
 # ---------------------------------------------------------------------------
@@ -946,10 +971,10 @@ def main():
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
 
     # Destination root: each recipient gets a subdirectory named after their
-    # HPC username.  Defaults to ./data_dir/ next to the script if datashare_dir
-    # is not set in the YAML.  On FIR this should be set to a path under
-    # /scratch or /project that is accessible by the cluster login nodes via SSH.
-    basedir = config.get('datashare_dir', os.path.join(SCRIPT_DIR, 'data_dir'))
+    # HPC username.  Resolved in priority order: machines[FIR].datashare_dir,
+    # then top-level datashare_dir, then ./data_dir/ next to this script.
+    # On FIR this resolves to /scratch/eartigau/datashare/.
+    basedir = get_datashare_dir(config)
 
     if not args.dry_run and not args.email_only:
         os.makedirs(basedir, exist_ok=True)
