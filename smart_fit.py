@@ -211,6 +211,9 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
         config = tt.load_telluric_config()
         medfilt_width_kms = config.get('processing', {}).get('hotstar_medfilt_width', 150)
 
+        # Per-order noise metrics on the original (pre-normalisation) spectrum
+        noise_hdu = tt.make_noise_table(sp)
+
         # Normalize spectrum per order
         for iord in range(wave0.shape[0]):
             sp[iord] /= np.nanpercentile(sp[iord], 90)
@@ -276,7 +279,11 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
         log_trans[weights_waveref < 0.5] = np.nan
 
         # Ensure plain numpy array for FITS compatibility (avoid "Derived must override" error)
-        fits.writeto(outname, np.asarray(log_trans), hdr, overwrite=True)
+        hdul = fits.HDUList([
+            fits.PrimaryHDU(np.asarray(log_trans), hdr),
+            noise_hdu,
+        ])
+        hdul.writeto(outname, overwrite=True)
 
         # Diagnostic plot if requested
         if doplot:

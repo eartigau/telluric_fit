@@ -2582,6 +2582,100 @@ def optimize_exponents(wave: np.ndarray,
 # O2 Masking
 # ============================================================================
 
+def make_noise_table(sp: np.ndarray,
+                     cent_npix: int = 1000,
+                     p2p_roll: int = 2,
+                     max_lag: int = 50,
+                     nan_thresh: float = 0.10) -> fits.BinTableHDU:
+    """
+    Compute per-order noise metrics and return them as a FITS BinTableHDU.
+
+    The table has one row per order and four columns:
+        ORDER    — order index (int16)
+        RMSPIX   — pixel-to-pixel RMS (float32)
+        RMSLOW   — median raw RMS over lags 10-50 px (float32)
+        RMSMOD   — estimated modal / correlated noise (float32)
+
+    Orders with more than nan_thresh NaN fraction in the central stretch
+    are stored with NaN values for the three RMS columns.
+
+    The symmetric window estimator used at every lag is:
+        diff = sp - (roll(sp, +lag) + roll(sp, -lag)) / 2
+    which acts as a high-pass filter and avoids low-frequency leakage.
+
+    Parameters
+    ----------
+    sp         : ndarray, shape (n_orders, n_pixels)
+    cent_npix  : number of central pixels to analyse per order
+    p2p_roll   : pixel roll for the p2p estimator
+    max_lag    : maximum lag (pixels) for the RMS curve
+    nan_thresh : mark order as NaN if NaN fraction of central stretch exceeds this
+
+    Returns
+    -------
+    fits.BinTableHDU  with EXTNAME = 'NOISE_METRICS'
+    """
+    from astropy.table import Table
+
+    def _robust_rms(arr):
+        p16, p84 = np.nanpercentile(arr, [15.865, 84.135])
+        return (p84 - p16) / 2.0
+
+    n_orders, n_pixels = sp.shape
+    mid = n_pixels // 2
+    i0  = mid - cent_npix // 2
+    i1  = mid + cent_npix // 2
+
+    lags       = np.arange(1, max_lag + 1)
+    mask_10_50 = (lags >= 10) & (lags <= 50)
+
+    orders_col  = np.arange(n_orders, dtype=np.int16)
+    rmspix_col  = np.full(n_orders, np.nan, dtype=np.float32)
+    rmslow_col  = np.full(n_orders, np.nan, dtype=np.float32)
+    rmsmod_col  = np.full(n_orders, np.nan, dtype=np.float32)
+
+    for iord in range(n_orders):
+        chunk = sp[iord, i0:i1].copy().astype(float)
+
+        if np.sum(~np.isfinite(chunk)) / len(chunk) > nan_thresh:
+            continue
+
+        # pixel-to-pixel noise
+        diff_p2p = chunk - (np.roll(chunk, p2p_roll) + np.roll(chunk, -p2p_roll)) / 2.0
+        diff_p2p[:p2p_roll]  = np.nan
+        diff_p2p[-p2p_roll:] = np.nan
+        p2p_rms = _robust_rms(diff_p2p) / np.sqrt(1.5)
+
+        # RMS vs lag (symmetric window)
+        rms_raw  = np.empty(len(lags))
+        rms_corr = np.empty(len(lags))
+        for i, npix in enumerate(lags):
+            diff = chunk - (np.roll(chunk, npix) + np.roll(chunk, -npix)) / 2.0
+            diff[:npix]  = np.nan
+            diff[-npix:] = np.nan
+            r = _robust_rms(diff) / np.sqrt(1.5)
+            rms_raw[i]  = r
+            rms_corr[i] = np.sqrt(max(r**2 - p2p_rms**2, 0.0))
+
+        rmspix_col[iord] = float(p2p_rms)
+        rmslow_col[iord] = float(np.median(rms_raw[mask_10_50]))
+        rmsmod_col[iord] = float(np.median(rms_corr[mask_10_50]))
+
+    tbl = Table([
+        orders_col, rmspix_col, rmslow_col, rmsmod_col,
+    ], names=['ORDER', 'RMSPIX', 'RMSLOW', 'RMSMOD'])
+    tbl['ORDER'].description  = 'Order index'
+    tbl['RMSPIX'].description = 'Pixel-to-pixel RMS'
+    tbl['RMSLOW'].description = 'Median RMS for scales 10-50 pixels'
+    tbl['RMSMOD'].description = 'Estimated modal noise (p2p subtracted in quadrature)'
+
+    hdu = fits.BinTableHDU(tbl)
+    hdu.name = 'NOISE_METRICS'
+    return hdu
+
+
+# ============================================================================
+
 def mask_o2(wave: np.ndarray, instrument: str = DEFAULT_INSTRUMENT) -> np.ndarray:
     """
     Create mask for O2 absorption lines.
@@ -2702,4 +2796,7 @@ __all__ = [
 
     # Optimization
     'optimize_exponents',
+
+    # Noise characterisation
+    'make_noise_table',
 ]
