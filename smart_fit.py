@@ -26,8 +26,8 @@ from scipy.signal import savgol_filter
 import astropy.units as u
 from astropy.time import Time
 import numexpr as ne
-from aperocore import math as mp
-from aperocore.science import wavecore
+# from aperocore import math as mp  # removed: using local functions from tellu_tools
+# from aperocore.science import wavecore  # removed: using local wave_to_wave from tellu_tools
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, wait, FIRST_COMPLETED
@@ -264,10 +264,10 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
         trans = sp_corr_final / blaze
 
         # Resample transmission to reference wavelength grid for consistent output
-        trans_waveref = wavecore.wave_to_wave(trans, wave0, waveref)
+        trans_waveref = tt.wave_to_wave(trans, wave0, waveref)
 
         # Resample combined_weights to reference grid for masking
-        weights_waveref = wavecore.wave_to_wave(combined_weights, wave0, waveref)
+        weights_waveref = tt.wave_to_wave(combined_weights, wave0, waveref)
 
         # Save log transmission
         with warnings.catch_warnings():

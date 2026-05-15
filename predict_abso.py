@@ -28,11 +28,11 @@ import matplotlib.pyplot as plt
 from astropy.table import Table
 from scipy.interpolate import InterpolatedUnivariateSpline as ius
 tprint("  - scipy loaded")
-from aperocore import math as mp
-tprint("  - aperocore.math loaded")
+# from aperocore import math as mp  # removed: using local functions from tellu_tools
+# tprint("  - aperocore.math loaded")
 import os
-from aperocore.science import wavecore
-tprint("  - aperocore.science.wavecore loaded")
+# from aperocore.science import wavecore  # removed: using local wave_to_wave from tellu_tools
+# tprint("  - aperocore.science.wavecore loaded")
 import shutil
 import time
 import warnings
@@ -148,7 +148,7 @@ def load_template(hdr: fits.Header, template_style: str,
         flux_template = np.array(template['flux'])
 
         # Normalize template by low-pass filtered continuum
-        flux_template /= mp.lowpassfilter(flux_template, 101)
+        flux_template /= tt.lowpassfilter(flux_template, 101)
 
         # Create spline interpolators (only for finite values)
         g = np.isfinite(flux_template)
@@ -327,7 +327,7 @@ def clean_template_ratio(sp_tmp: np.ndarray, template2: np.ndarray, config: Dict
             # Smooth the ratio to remove high-frequency noise (only if enough valid points)
             valid_count = np.sum(np.isfinite(ratio))
             if valid_count > config['template_smooth_window'] + 1:
-                ratio = mp.lowpassfilter(ratio, config['template_smooth_window'])
+                ratio = tt.lowpassfilter(ratio, config['template_smooth_window'])
             elif valid_count == 1:
                 # Too few points to filter
                 ratio = np.nan
@@ -394,9 +394,9 @@ def apply_post_correction(sp_corr: np.ndarray, abso_scaling: np.ndarray,
     post_correction_waveref[~np.isfinite(post_correction_waveref)] = 0.0
 
     # Interpolate to spectrum wavelength grid
-    post_correction = wavecore.wave_to_wave(post_correction_waveref, waveref, wave)
-    rms_interp = wavecore.wave_to_wave(residual_rms, waveref, wave)
-    rms_envelope_interp = wavecore.wave_to_wave(residual_rms_envelope, waveref, wave)
+    post_correction = tt.wave_to_wave(post_correction_waveref, waveref, wave)
+    rms_interp = tt.wave_to_wave(residual_rms, waveref, wave)
+    rms_envelope_interp = tt.wave_to_wave(residual_rms_envelope, waveref, wave)
 
     # Reject extreme corrections (likely unphysical)
     post_correction[np.abs(post_correction) > np.exp(1)] = np.nan
@@ -646,7 +646,7 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     sp_corr_tmp = sp / abso_no_water
 
     # Estimate sky using low-pass filtered spectrum as continuum
-    sp_no_sky = mp.lowpassfilter(sp_corr_tmp.ravel(), config['lowpass_filter_size']).reshape(sp.shape) * abso_no_water
+    sp_no_sky = tt.lowpassfilter(sp_corr_tmp.ravel(), config['lowpass_filter_size']).reshape(sp.shape) * abso_no_water
     sky_tmp = tt.sky_pca_fast(wave=wave, spectrum=sp - sp_no_sky, sky_dict=sky_dict,
                               force_positive=True, doplot=tt.user_params()['doplot'])
 
@@ -664,7 +664,7 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     hdr['SYS_VELO'] = (hdr['ABS_VELO'] - hdr['BERV'], 'Systemic velocity (km/s)')
 
     # Shift template to stellar rest frame
-    template2 = spl(wave * mp.relativistic_waveshift(veloshift))
+    template2 = spl(wave * tt.relativistic_waveshift(veloshift))
 
     # Only keep wavelength domain to be fitted
     template2[wave < np.nanmin(tt.user_params()['wave_fit'])] = np.nan

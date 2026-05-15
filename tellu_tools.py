@@ -43,13 +43,14 @@ import astropy.units as u
 from scipy.optimize import curve_fit, minimize
 from scipy.interpolate import InterpolatedUnivariateSpline as ius
 from scipy.signal import savgol_filter
+from scipy.special import erf
 
 # YAML support
 import yaml
 
-# APERO
-from aperocore import math as mp
-from aperocore.science import wavecore
+# APERO -- removed: replaced by local implementations below
+# from aperocore import math as mp
+# from aperocore.science import wavecore
 
 # Local imports
 from tellu_tools_config import (
@@ -71,6 +72,101 @@ from tellu_tools_config import (
 
 # Default path to telluric config
 TELLURIC_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'telluric_config.yaml')
+
+
+# ============================================================================
+# Local replacements for aperocore functions
+# ============================================================================
+
+# Speed of light (km/s) — same value as astropy c
+_SPEED_OF_LIGHT_KMS = 299792.458
+
+
+def robust_nanstd(x):
+    """Robust std via 1-sigma percentile range (ignores NaNs/outliers)."""
+    erfvalue = erf(np.array([1.0]))[0] * 100
+    low = np.nanpercentile(x, 100 - erfvalue)
+    high = np.nanpercentile(x, erfvalue)
+    return (high - low) / 2.0
+
+
+def lowpassfilter(input_vect, width=101, k=1, frac_valid_min=0):
+    """Running NaN-median low-pass filter via spline interpolation."""
+    index = np.arange(len(input_vect))
+    xmed, ymed = [], []
+    for it in np.arange(-width // 2, len(input_vect) + width // 2, width // 4):
+        low_bound = max(it, 0)
+        high_bound = min(it + int(width), len(input_vect) - 1)
+        pixval = index[low_bound:high_bound]
+        if len(pixval) < 3:
+            continue
+        if np.mean(np.isfinite(input_vect[pixval])) <= frac_valid_min:
+            continue
+        pixval = pixval[np.isfinite(input_vect[pixval])]
+        xmed.append(np.nanmean(pixval))
+        ymed.append(np.nanmedian(input_vect[pixval]))
+    xmed = np.array(xmed, dtype=float)
+    ymed = np.array(ymed, dtype=float)
+    if len(xmed) < 3:
+        return np.zeros_like(input_vect) + np.nan
+    if len(xmed) != len(np.unique(xmed)):
+        xmed2 = np.unique(xmed)
+        ymed2 = np.array([np.mean(ymed[xmed == x]) for x in xmed2])
+        xmed, ymed = xmed2, ymed2
+    spline = ius(xmed, ymed, k=k, ext=3)
+    return spline(np.arange(len(input_vect)))
+
+
+def relativistic_waveshift(dv, units='km/s'):
+    """Relativistic wavelength shift factor for a given velocity."""
+    c = _SPEED_OF_LIGHT_KMS if units == 'km/s' else _SPEED_OF_LIGHT_KMS * 1000
+    return np.sqrt((1 + dv / c) / (1 - dv / c))
+
+
+def wave_to_wave(spectrum, wave1, wave2, reshape=False, splinek=5):
+    """Resample spectrum from wavelength grid wave1 to wave2 (order-by-order spline)."""
+    if reshape or (spectrum.shape != wave2.shape):
+        spectrum = spectrum.reshape(wave2.shape)
+    if np.nansum(wave1 != wave2) == 0:
+        return spectrum
+    sz = np.shape(spectrum)
+    output_spectrum = np.zeros(sz) + np.nan
+    for iord in range(sz[0]):
+        g = np.isfinite(spectrum[iord, :])
+        if np.sum(g) > 6:
+            spline = ius(wave1[iord, g], spectrum[iord, g], k=splinek, ext=3)
+            splinemask = ius(wave1[iord, :], g.astype(float), k=1, ext=1)
+            output_spectrum[iord, :] = spline(wave2[iord, :])
+            bad = output_spectrum[iord, :] == 0
+            output_spectrum[iord, bad] = np.nan
+            mask = splinemask(wave2[iord, :])
+            output_spectrum[iord, mask <= 0.9] = np.nan
+    return output_spectrum
+
+
+def robust_polyfit(xvector, yvector, degree, nsigcut):
+    """Iterative sigma-clipping polynomial fit. Returns (fit_coeffs, good_mask)."""
+    finite_mask = np.isfinite(yvector) & np.isfinite(xvector)
+    xvector = xvector[finite_mask]
+    yvector = yvector[finite_mask]
+    if len(xvector) < degree + 1 or len(yvector) < degree + 1:
+        raise ValueError('Not enough points to fit polynomial in robust_polyfit')
+    weight = np.ones_like(xvector)
+    odd_cut = np.exp(-0.5 * nsigcut ** 2)
+    weight_before = np.zeros_like(weight)
+    fit = None
+    for _ in range(20):
+        if np.max(np.abs(weight - weight_before)) < 1e-9:
+            break
+        fit = np.polyfit(xvector, yvector, degree, w=weight)
+        res = yvector - np.polyval(fit, xvector)
+        sig = np.nanmedian(np.abs(res))
+        num = np.exp(-0.5 * (res / sig) ** 2) * (1 - odd_cut)
+        den = odd_cut + num
+        weight_before = np.array(weight)
+        weight = num / den
+    keep = weight > 0.5
+    return fit, keep
 
 
 # ============================================================================
@@ -674,7 +770,7 @@ def sky_pca_fast(wave: Optional[np.ndarray] = None,
     # Interpolate PCA components onto observation wavelength grid
     cube = np.zeros((Npca, *wave.shape))
     for ipca in range(Npca):
-        cube[ipca] = wavecore.wave_to_wave(
+        cube[ipca] = wave_to_wave(
             sky_dict['SCI_SKY'][ipca].reshape(wave.shape),
             sky_dict['WAVE'],
             wave
@@ -842,7 +938,7 @@ def sky_pca(wave: Optional[np.ndarray] = None,
     cube = np.zeros((Npca, *wave.shape))
 
     for ipca in range(Npca):
-        cube[ipca] = wavecore.wave_to_wave(
+        cube[ipca] = wave_to_wave(
             sky_dict['SCI_SKY'][ipca].reshape(wave.shape),
             sky_dict['WAVE'],
             wave
@@ -984,16 +1080,16 @@ def get_velo(wave: np.ndarray,
     # High-pass filter spectrum in log space
     with np.errstate(invalid='ignore'):
         sp_tmp = np.log(sp).ravel()
-    sp_tmp -= mp.lowpassfilter(sp_tmp, 101)
+    sp_tmp -= lowpassfilter(sp_tmp, 101)
 
     amp = np.zeros_like(dvs, dtype=float) + np.nan
-    rms = mp.robust_nanstd(np.diff(sp_tmp))
+    rms = robust_nanstd(np.diff(sp_tmp))
 
     # Coarse search (every 10 steps)
     for i in tqdm(range(len(dvs))[::VELOCITY_CONFIG['coarse_step']],
                  desc='Optimizing velocity shift (coarse)', leave=False):
         dv = dvs[i]
-        template2 = np.log(spl(wave * mp.relativistic_waveshift(dv))).ravel()
+        template2 = np.log(spl(wave * relativistic_waveshift(dv))).ravel()
         amp[i] = np.nansum(sp_tmp * template2)
 
     # Find coarse peak
@@ -1007,7 +1103,7 @@ def get_velo(wave: np.ndarray,
             continue
 
         dv = dvs[i]
-        template2 = np.log(spl(wave * mp.relativistic_waveshift(dv))).ravel()
+        template2 = np.log(spl(wave * relativistic_waveshift(dv))).ravel()
         amp[i] = np.nansum(sp_tmp * template2)
 
     # Remove NaN values

@@ -7,11 +7,11 @@ from astropy.table import Table
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
-from tellu_tools import hotstar, construct_abso, getdata_safe, savgol_filter_nan_fast, savgol_filter_robust, getheader_safe, load_telluric_config
+from tellu_tools import hotstar, construct_abso, getdata_safe, savgol_filter_nan_fast, savgol_filter_robust, getheader_safe, load_telluric_config, relativistic_waveshift, robust_polyfit, wave_to_wave
 from tellu_tools_config import get_user_params
-from aperocore import math as mp
+# from aperocore import math as mp  # removed: using local functions from tellu_tools
 from scipy.interpolate import InterpolatedUnivariateSpline as ius
-from aperocore.science import wavecore
+# from aperocore.science import wavecore  # removed: using local wave_to_wave from tellu_tools
 from scipy.signal import medfilt
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from functools import partial
@@ -57,7 +57,7 @@ def _fast_berv_shift(residuals, wave, bervs, to_stellar=True):
     for i in range(n_exp):
         berv = bervs[i]
         # Target wavelength grid
-        wave_target = wave * mp.relativistic_waveshift(sign * berv)
+        wave_target = wave * relativistic_waveshift(sign * berv)
         # Use linear interpolation (much faster than spline for this application)
         valid = np.isfinite(residuals[i])
         if np.sum(valid) < 10:
@@ -137,7 +137,7 @@ def _process_single_order(args):
             for i in range(residual_tmp.shape[0]):
                 diff = residual_tmp[i] - med
                 try:
-                    fit = mp.robust_polyfit(wave_order, diff, 1, 3)[0]
+                    fit = robust_polyfit(wave_order, diff, 1, 3)[0]
                     off = np.polyval(fit, wave_order)
                     residual_tmp[i] -= off
                 except Exception:
@@ -200,7 +200,7 @@ def _process_single_order(args):
             if np.sum(valid) < 3:
                 continue
             try:
-                fit, _ = mp.robust_polyfit(x[valid], y[valid], 1, 3)
+                fit, _ = robust_polyfit(x[valid], y[valid], 1, 3)
                 slope_offset[ipix] = fit[0]
                 dc_offset[ipix] = fit[1]
                 recon[:, ipix] = fit[1] + fit[0] * x
@@ -219,7 +219,7 @@ def _process_single_order(args):
             if np.sum(valid) < 3:
                 continue
             try:
-                fit, _ = mp.robust_polyfit(x[valid], y[valid], 1, 3)
+                fit, _ = robust_polyfit(x[valid], y[valid], 1, 3)
                 slope_offset[ipix] = fit[0]
                 dc_offset[ipix] = fit[1]
                 recon[:, ipix] = fit[1] + fit[0] * x_full
