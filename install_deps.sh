@@ -3,27 +3,33 @@
 # Designed for Compute Canada (Narval/FIR) with CVMFS wheelhouse.
 #
 # Usage:
-#   module load python/3.12.4   # or whichever python/3.12.x is available
+#   module load python/3.12.4
 #   ./install_deps.sh
 #   source ~/telluric_env/bin/activate
 
-set -e   # abort immediately if any command fails
+set -e
 
 VENV_DIR="${HOME}/telluric_env"
+WHEELHOUSE="/cvmfs/soft.computecanada.ca/custom/python/wheelhouse/generic"
 
-# Wipe corrupted virtualenv seed cache (causes "no .dist-info" RuntimeError)
-echo "Clearing virtualenv cache ..."
-rm -rf "${HOME}/.local/share/virtualenv"
-
-# Also remove any previous broken venv
 rm -rf "${VENV_DIR}"
 
-echo "Creating virtualenv at ${VENV_DIR} ..."
-virtualenv --no-download "${VENV_DIR}"
+echo "Creating bare virtualenv (no pip seeding) ..."
+# --without-pip avoids the filelock/I-O error in virtualenv's seed mechanism
+python -m venv --without-pip "${VENV_DIR}"
 
 source "${VENV_DIR}/bin/activate"
 
-# Install all dependencies from the CVMFS wheelhouse (--no-index = no network)
+# Bootstrap pip by running it directly from the CVMFS wheel (a zip file)
+PIP_WHEEL=$(ls "${WHEELHOUSE}"/pip-*.whl 2>/dev/null | sort -V | tail -1)
+if [ -z "${PIP_WHEEL}" ]; then
+    echo "ERROR: no pip wheel found in ${WHEELHOUSE}" >&2
+    exit 1
+fi
+echo "Bootstrapping pip from ${PIP_WHEEL} ..."
+python "${PIP_WHEEL}/pip" install --no-index "${PIP_WHEEL}"
+
+# Install all dependencies from the CVMFS wheelhouse
 pip install --no-index \
     numpy \
     matplotlib \
