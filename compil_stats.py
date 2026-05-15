@@ -40,9 +40,10 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 from astropy.table import Table
 from scipy.optimize import curve_fit
+from scipy.special import erf
 from tellu_tools import construct_abso, optimize_exponents, hotstar, sky_pca_fast, load_telluric_config
 from tellu_tools_config import tprint, get_user_params
-from aperocore import math as mp
+# from aperocore import math as mp  # removed: replaced by local robust_nanstd below
 from tqdm import tqdm
 import os
 import sys
@@ -59,6 +60,18 @@ warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*invalid va
 warnings.filterwarnings('ignore', category=RuntimeWarning, message='.*divide by zero.*')
 warnings.filterwarnings('ignore', message='.*Card is too long.*')
 warnings.filterwarnings('ignore', message='.*VerifyWarning.*')
+
+# =============================================================================
+# Local replacement for aperocore.math.robust_nanstd
+# =============================================================================
+
+def robust_nanstd(x):
+    """Robust std estimate via 1-sigma percentile range (ignores NaNs and outliers)."""
+    erfvalue = erf(np.array([1.0]))[0] * 100
+    low = np.nanpercentile(x, 100 - erfvalue)
+    high = np.nanpercentile(x, erfvalue)
+    return (high - low) / 2.0
+
 
 # =============================================================================
 # Global State
@@ -517,10 +530,10 @@ while sigmax > sigma_cut:
 
     residual = tbl['O2_AIRM'][o2_fit_mask]/tbl['AIRMASS'][o2_fit_mask]**curve_fit_o2[4]/(tbl['NORMALIZED_TEMPERAT'][o2_fit_mask])**curve_fit_o2[5]/tbl['NORMALIZED_PRESSURE'][o2_fit_mask]**curve_fit_o2[6] - anthropic([tbl['MJDMID'][o2_fit_mask], np.ones(np.sum(o2_fit_mask)), 273.15*np.ones(np.sum(o2_fit_mask)), np.ones(np.sum(o2_fit_mask))], *curve_fit_o2_zenith)
     
-    sigmax = np.max(np.abs(residual/mp.robust_nanstd(residual)))
+    sigmax = np.max(np.abs(residual/robust_nanstd(residual)))
     if sigmax > sigma_cut:
         tprint(f'Removing O2 outlier with {sigmax:.2f} sigma max deviation', color='yellow')
-        maxid = np.argmax(np.abs(residual/mp.robust_nanstd(residual)))
+        maxid = np.argmax(np.abs(residual/robust_nanstd(residual)))
         # Mark as invalid in O2_VALID instead of removing the row
         o2_fit_indices = np.where(o2_fit_mask)[0]
         tbl['O2_VALID'][o2_fit_indices[maxid]] = False
@@ -577,7 +590,7 @@ plt.ylabel('O2 fit residuals (morning)')
 plt.grid()
 plt.show()
 
-tprint(f'O2 fit residuals std (morning): {mp.robust_nanstd(tbl["RESIDUAL_O2"][o2_fit_mask])*100:.4f}%', color='blue')
+tprint(f'O2 fit residuals std (morning): {robust_nanstd(tbl["RESIDUAL_O2"][o2_fit_mask])*100:.4f}%', color='blue')
 
 # =============================================================================
 # Paper Figure: O2 Temporal Fit
@@ -679,10 +692,10 @@ while nsigmax > sigma_cut:
 
     tbl['RESIDUAL_CO2'] = tbl['CO2_VMR']/tbl['AIRMASS']**curve_fit_co2[4]/(tbl['NORMALIZED_TEMPERAT'])**curve_fit_co2[5]/tbl['NORMALIZED_PRESSURE']**curve_fit_co2[6] - anthropic([tbl['MJDMID'], np.ones_like(tbl['MJDMID']), 273.15*np.ones_like(tbl['MJDMID']), np.ones_like(tbl['MJDMID'])], *curve_fit_co2_zenith)
 
-    nsigmax = np.max(np.abs(tbl['RESIDUAL_CO2']/mp.robust_nanstd(tbl['RESIDUAL_CO2'])))
+    nsigmax = np.max(np.abs(tbl['RESIDUAL_CO2']/robust_nanstd(tbl['RESIDUAL_CO2'])))
     if nsigmax > sigma_cut:
         print(f'Removing outlier with {nsigmax:.2f} sigma max deviation')
-        maxid = np.argmax(np.abs(tbl['RESIDUAL_CO2']/mp.robust_nanstd(tbl['RESIDUAL_CO2'])))
+        maxid = np.argmax(np.abs(tbl['RESIDUAL_CO2']/robust_nanstd(tbl['RESIDUAL_CO2'])))
         tbl.remove_row(maxid)
 
 
@@ -779,7 +792,7 @@ if enabled and not _paper_figure_done['fig_co2']:
     _paper_figure_done['fig_co2'] = True
 plt.show()
 
-tprint(f'Fractional CO2 fit residuals : {mp.robust_nanstd(tbl["RESIDUAL_CO2"])/np.nanmedian(tbl["CO2_VMR"])*100:.2f}%', color='blue')
+tprint(f'Fractional CO2 fit residuals : {robust_nanstd(tbl["RESIDUAL_CO2"])/np.nanmedian(tbl["CO2_VMR"])*100:.2f}%', color='blue')
 
 # =============================================================================
 # CH4 Fit (Full Anthropic Model with Temporal Variation)
@@ -807,10 +820,10 @@ while nsigmax > sigma_cut:
 
     tbl['RESIDUAL_CH4'] = tbl['CH4_VMR']/tbl['AIRMASS']**curve_fit_ch4[4]/(tbl['NORMALIZED_TEMPERAT'])**curve_fit_ch4[5]/tbl['NORMALIZED_PRESSURE']**curve_fit_ch4[6] - anthropic([tbl['MJDMID'], np.ones_like(tbl['MJDMID']), 273.15*np.ones_like(tbl['MJDMID']), np.ones_like(tbl['MJDMID'])], *curve_fit_ch4_zenith)
 
-    nsigmax = np.max(np.abs(tbl['RESIDUAL_CH4']/mp.robust_nanstd(tbl['RESIDUAL_CH4'])))
+    nsigmax = np.max(np.abs(tbl['RESIDUAL_CH4']/robust_nanstd(tbl['RESIDUAL_CH4'])))
     if nsigmax > sigma_cut:
         print(f'Removing outlier with {nsigmax:.2f} sigma max deviation')
-        maxid = np.argmax(np.abs(tbl['RESIDUAL_CH4']/mp.robust_nanstd(tbl['RESIDUAL_CH4'])))
+        maxid = np.argmax(np.abs(tbl['RESIDUAL_CH4']/robust_nanstd(tbl['RESIDUAL_CH4'])))
         tbl.remove_row(maxid)
 
 
@@ -909,7 +922,7 @@ if enabled and not _paper_figure_done['fig_ch4']:
     _paper_figure_done['fig_ch4'] = True
 plt.show()
 
-tprint(f'Fractional CH4 fit residuals : {mp.robust_nanstd(tbl["RESIDUAL_CH4"])/np.nanmedian(tbl["CH4_VMR"])*100:.2f}%', color='blue')
+tprint(f'Fractional CH4 fit residuals : {robust_nanstd(tbl["RESIDUAL_CH4"])/np.nanmedian(tbl["CH4_VMR"])*100:.2f}%', color='blue')
 
 plt.figure()
 plt.plot(tbl['AIRMASS'],tbl['RESIDUAL_CH4'], 'ko', label='CH4 residuals')
@@ -1031,8 +1044,8 @@ if enabled:
         
         # Summary statistics
         f.write('% ===== Fit Quality Statistics =====\\n')
-        co2_rms = mp.robust_nanstd(tbl["RESIDUAL_CO2"])/np.nanmedian(tbl["CO2_VMR"])*100
-        ch4_rms = mp.robust_nanstd(tbl["RESIDUAL_CH4"])/np.nanmedian(tbl["CH4_VMR"])*100
+        co2_rms = robust_nanstd(tbl["RESIDUAL_CO2"])/np.nanmedian(tbl["CO2_VMR"])*100
+        ch4_rms = robust_nanstd(tbl["RESIDUAL_CH4"])/np.nanmedian(tbl["CH4_VMR"])*100
         f.write(f'% CO2 fractional RMS residuals: {co2_rms:.2f}%\\n')
         f.write(f'% CH4 fractional RMS residuals: {ch4_rms:.2f}%\\n')
         f.write(f'% Number of observations: {len(tbl)}\\n')
