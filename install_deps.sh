@@ -5,22 +5,23 @@
 # Usage:
 #   module load python/3.12.4
 #   ./install_deps.sh
-#   source ~/telluric_env/bin/activate
+#   source $SCRATCH/telluric_env/bin/activate   (or wherever the venv landed)
 
 set -e
 
-VENV_DIR="${HOME}/telluric_env"
 WHEELHOUSE="/cvmfs/soft.computecanada.ca/custom/python/wheelhouse/generic"
 
+VENV_DIR="${HOME}/projects/rrg-rdoyon/eartigau/telluric_env"
+
+echo "Venv will be created at: ${VENV_DIR}"
 rm -rf "${VENV_DIR}"
 
 echo "Creating bare virtualenv (no pip seeding) ..."
-# --without-pip avoids the filelock/I-O error in virtualenv's seed mechanism
 python -m venv --without-pip "${VENV_DIR}"
 
 source "${VENV_DIR}/bin/activate"
 
-# Bootstrap pip by running it directly from the CVMFS wheel (a zip file)
+# Bootstrap pip by running it directly from the CVMFS wheel (no writes to $HOME)
 PIP_WHEEL=$(ls "${WHEELHOUSE}"/pip-*.whl 2>/dev/null | sort -V | tail -1)
 if [ -z "${PIP_WHEEL}" ]; then
     echo "ERROR: no pip wheel found in ${WHEELHOUSE}" >&2
