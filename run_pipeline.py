@@ -66,7 +66,10 @@ def run_sync(instrument):
     if not os.path.exists(sync_script):
         _tprint(f'Script {sync_script} not found — skipping sync.')
         return
-    ret = subprocess.call(['bash', sync_script], cwd=SCRIPT_DIR)
+    env = os.environ.copy()
+    # Force sync scripts to use the same interpreter as this process.
+    env['TELLURIC_PYTHON'] = sys.executable
+    ret = subprocess.call(['bash', sync_script], cwd=SCRIPT_DIR, env=env)
     if ret != 0:
         _tprint(f'WARNING: sync_{instrument} returned exit code {ret}.')
     else:

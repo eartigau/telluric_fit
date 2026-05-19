@@ -1,11 +1,11 @@
 
 # Sync calibration and science files for NIRPS
-# Use the python from the venv directly — avoids shell environment issues
-PYTHON="$HOME/Venv/tellu_env/bin/python"
-if [ ! -f "$PYTHON" ]; then
-    PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
-fi
+# Prefer the interpreter provided by run_pipeline.py; fallback to active shell python.
+PYTHON="${TELLURIC_PYTHON:-}"
 if [ -z "$PYTHON" ]; then
+    PYTHON=$(command -v python 2>/dev/null || command -v python3 2>/dev/null)
+fi
+if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
     echo "ERROR: no python found"
     exit 1
 fi

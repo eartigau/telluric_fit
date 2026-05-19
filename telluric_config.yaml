@@ -72,7 +72,7 @@ data_recipients:
     email: etienne.artigau@umontreal.ca
     targets:
       - PROXIMA
-  edelgado:
+  edm:
     name: Elisa Delgado Mena
     email: elisa.delgado@astro.up.pt
     targets:
