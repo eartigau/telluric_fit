@@ -1173,13 +1173,25 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
     tprint("Initialization complete - starting file processing")
 
     # Get number of cores from config
-    n_cores = config.get('n_cores', 1)
-    
+    raw_cores = config.get('n_cores', 1)
+    if raw_cores == 'auto' or raw_cores is None:
+        import os as _os_cores
+        n_cores = _os_cores.cpu_count() or 1
+        tprint(f"n_cores=auto resolved to {n_cores} (os.cpu_count())", color='cyan')
+    else:
+        n_cores = int(raw_cores)
+    # On SLURM clusters n_cores must not exceed the allocated CPU count
+    _slurm_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', n_cores))
+    if n_cores > _slurm_cpus:
+        tprint(f"WARNING: n_cores={n_cores} > SLURM_CPUS_PER_TASK={_slurm_cpus}; clamping to {_slurm_cpus}", color='yellow')
+        n_cores = _slurm_cpus
+
     # Process all files
     n_processed = 0
     n_skipped = 0
+    parallel_enabled = n_cores > 1 and len(pending_files) > 1
 
-    if n_cores > 1 and len(pending_files) > 1:
+    if parallel_enabled:
         # Parallel processing
         tprint(f"Using parallel processing with {n_cores} cores", color='cyan')
         
@@ -1202,6 +1214,10 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         n_done = 0
         retry_counts = {}
         remaining_args = list(enumerate(args_list))  # (idx, arg)
+
+        def _format_task_location(task_arg):
+            """Return a compact task descriptor for logs."""
+            return os.path.basename(task_arg[0])
 
         while remaining_args:
             pool = _mp.Pool(processes=n_cores)
@@ -1243,8 +1259,13 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
                     if len(completed_this_round) == len(async_results):
                         break
                     if time.time() > deadline:
+                        remaining_locs = [_format_task_location(arg)
+                                          for idx, arg in remaining_args
+                                          if idx not in completed_this_round]
+                        sample_txt = '; '.join(remaining_locs[:3]) if remaining_locs else 'n/a'
                         tprint(f'WARNING: no progress in {TASK_TIMEOUT}s — terminating pool '
-                               f'and retrying {len(async_results) - len(completed_this_round)} tasks.',
+                               f'and retrying {len(async_results) - len(completed_this_round)} tasks. '
+                               f'Likely a worker hang/deadlock. Example pending: {sample_txt}',
                                color='red')
                         hung = True
                         break
@@ -1265,7 +1286,9 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
             for idx, arg in remaining_args:
                 retry_counts[idx] = retry_counts.get(idx, 0) + 1
                 if retry_counts[idx] >= MAX_RETRIES:
-                    tprint(f'Task {idx} failed {MAX_RETRIES} times in parallel — running serially.',
+                    task_loc = _format_task_location(arg)
+                    tprint(f'Task {idx} ({task_loc}) made no progress after {MAX_RETRIES} '
+                           f'parallel retries — running serially.',
                            color='red')
                     serial_fallback.append(arg)
                 else:
@@ -1285,6 +1308,8 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
         
     else:
         # Serial processing
+        tprint('Running in serial mode (parallel disabled by settings or file count). '
+               'This is nominal and can be more stable.', color='green')
         durations = []
         for i, file in enumerate(pending_files, start=1):
             loop_start = time.time()
@@ -1315,6 +1340,8 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
     tprint(f"Files processed: {n_processed}")
     tprint(f"Files skipped: {n_skipped}")
     tprint(f"Total files: {N_total} ({n_already_done} already done, {N_pending} processed now)")
+    if (not parallel_enabled) and n_skipped == 0 and N_pending > 0:
+        tprint('Serial processing completed nominally with no failures.', color='green')
     tprint(f"{'='*60}")
 
     # Generate diagnostic plots if requested

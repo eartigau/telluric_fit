@@ -304,7 +304,7 @@ machines:
     detect_path: '/Users/eartigau/telluric_fit'
     project_path: '/Users/eartigau/telluric_fit'
     doplot: true                 # Show interactive plots on MacBook
-    n_cores: 1                   # Serial processing on MacBook
+    n_cores: auto                # Use all available cores (auto = os.cpu_count())
 
 # =============================================================================
 # Batch settings

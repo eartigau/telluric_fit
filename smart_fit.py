@@ -554,7 +554,12 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     if doplot is None:
         doplot = machine_config.get('doplot', False)
     if n_cores is None:
-        n_cores = machine_config.get('n_cores', 1)
+        raw_cores = machine_config.get('n_cores', 1)
+        if raw_cores == 'auto' or raw_cores is None:
+            n_cores = os.cpu_count() or 1
+            tprint(f"n_cores=auto resolved to {n_cores} (os.cpu_count())", color='cyan')
+        else:
+            n_cores = int(raw_cores)
         # On SLURM clusters n_cores must not exceed the allocated CPU count
         slurm_cpus = int(os.environ.get('SLURM_CPUS_PER_TASK', n_cores))
         if n_cores > slurm_cpus:
@@ -624,8 +629,9 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     n_processed = 0
     n_skipped = 0
     start_time = time.perf_counter()
+    parallel_enabled = n_cores > 1 and len(pending_files) > 1
 
-    if n_cores > 1 and len(pending_files) > 1:
+    if parallel_enabled:
         # Parallel processing
         tprint(f"Using parallel processing with {n_cores} cores", color='cyan')
 
@@ -655,6 +661,12 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
         n_done = 0
         retry_counts = {}
         remaining_args = list(enumerate(args_list))  # (idx, arg)
+
+        def _format_task_location(task_arg):
+            """Return a compact task descriptor for logs."""
+            in_file = os.path.basename(task_arg[0])
+            out_file = os.path.basename(task_arg[1])
+            return f'{in_file} -> {out_file}'
 
         while remaining_args:
             pool = _mp.Pool(processes=n_cores)
@@ -699,8 +711,13 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
                     if len(completed_this_round) == len(async_results):
                         break
                     if time.perf_counter() > deadline:
+                        remaining_locs = [_format_task_location(arg)
+                                          for idx, arg in remaining_args
+                                          if idx not in completed_this_round]
+                        sample_txt = '; '.join(remaining_locs[:3]) if remaining_locs else 'n/a'
                         tprint(f'WARNING: no progress in {TASK_TIMEOUT}s — terminating pool '
-                               f'and retrying {len(async_results) - len(completed_this_round)} tasks.',
+                               f'and retrying {len(async_results) - len(completed_this_round)} tasks. '
+                               f'Likely a worker hang/deadlock. Example pending: {sample_txt}',
                                color='red')
                         hung = True
                         break
@@ -721,7 +738,9 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
             for idx, arg in remaining_args:
                 retry_counts[idx] = retry_counts.get(idx, 0) + 1
                 if retry_counts[idx] >= MAX_RETRIES:
-                    tprint(f'Task {idx} failed {MAX_RETRIES} times in parallel — running serially.',
+                    task_loc = _format_task_location(arg)
+                    tprint(f'Task {idx} ({task_loc}) made no progress after {MAX_RETRIES} '
+                           f'parallel retries — running serially.',
                            color='red')
                     serial_fallback.append(arg)
                 else:
@@ -741,6 +760,8 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
         
     else:
         # Serial processing
+        tprint('Running in serial mode (parallel disabled by settings or file count). '
+               'This is nominal and can be more stable.', color='green')
         durations = []
         plot_skip_counter = 0  # Counter for skipping plots
         for idx, (file, outname) in enumerate(pending_files, start=1):
@@ -797,6 +818,8 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     tprint(f"Files processed: {n_processed}")
     tprint(f"Files skipped: {n_skipped}")
     tprint(f"Total time: {format_eta(total_time)}")
+    if (not parallel_enabled) and n_skipped == 0 and N_pending > 0:
+        tprint('Serial processing completed nominally with no failures.', color='green')
     tprint(f"{'='*60}")
 
 
