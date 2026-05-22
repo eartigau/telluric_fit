@@ -244,23 +244,23 @@ def interactive_send_emails(email_blocks):
     _save_email_log(email_log)
 
 
-def get_project_path(config):
+def get_machine_cfg(config):
+    """Return the config block for the current machine, or {}."""
     machines = config.get('machines', {})
     for _name, mcfg in machines.items():
         detect = mcfg.get('detect_path', '')
         if detect and os.path.exists(detect):
-            return mcfg['project_path']
-    return SCRIPT_DIR
+            return mcfg
+    return {}
+
+
+def get_project_path(config):
+    return get_machine_cfg(config).get('project_path', SCRIPT_DIR)
 
 
 def get_hostname(config):
     """Return the hostname of the current machine, from config if available."""
-    machines = config.get('machines', {})
-    for _name, mcfg in machines.items():
-        detect = mcfg.get('detect_path', '')
-        if detect and os.path.exists(detect):
-            return mcfg.get('hostname', None)
-    return None
+    return get_machine_cfg(config).get('hostname', None)
 
 
 # ---------------------------------------------------------------------------
@@ -596,7 +596,9 @@ def main():
     prompt_missing_info(recipients, config, no_prompt=args.no_prompt)
 
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
-    basedir = config.get('datashare_dir', os.path.join(SCRIPT_DIR, 'data_dir'))
+    machine_cfg = get_machine_cfg(config)
+    basedir = machine_cfg.get('datashare_dir',
+                config.get('datashare_dir', os.path.join(SCRIPT_DIR, 'data_dir')))
 
     if not args.dry_run and not args.email_only:
         os.makedirs(basedir, exist_ok=True)

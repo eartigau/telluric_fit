@@ -1,14 +1,5 @@
 
 # Sync calibration and science files for SPIROU
-PYTHON="${TELLURIC_PYTHON:-}"
-if [ -z "$PYTHON" ]; then
-    PYTHON=$(command -v python 2>/dev/null || command -v python3 2>/dev/null)
-fi
-if [ -z "$PYTHON" ] || [ ! -x "$PYTHON" ]; then
-    echo "ERROR: no python found"
-    exit 1
-fi
-
 SRC_BASE="/scratch/eartigau/spirou_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
@@ -24,7 +15,7 @@ if [ ! -f "$BATCH_CONFIG" ]; then
     exit 1
 fi
 
-PROJECT_PATH=$($PYTHON -c "
+PROJECT_PATH=$(python3 -c "
 import yaml, os, sys
 cfg_path = '$BATCH_CONFIG'
 with open(cfg_path) as f:
@@ -85,7 +76,7 @@ echo ""
 
 # Sync science objects — only targets listed under science_targets in the YAML
 echo "[2/3] Loading science_targets from telluric_config.yaml..."
-SCIENCE_TARGETS=($($PYTHON -c "
+SCIENCE_TARGETS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 targets = sorted({t for info in cfg.get('data_recipients', {}).values() for t in (info if isinstance(info, list) else info.get('targets', []))})
@@ -119,7 +110,7 @@ echo ""
 
 # Copy hotstars (flattened - no subdirectories)
 echo "[3/3] Loading hot_stars from telluric_config.yaml..."
-HOT_STARS=($($PYTHON -c "
+HOT_STARS=($(python3 -c "
 import yaml, os
 cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
