@@ -1,5 +1,14 @@
 
 # Sync calibration and science files for SPIROU
+# Use the interpreter run_pipeline.py is running under if set, else the venv, avoids shell environment issues
+PYTHON="${TELLURIC_PYTHON:-$HOME/Venv/tellu_env/bin/python}"
+if [ ! -f "$PYTHON" ]; then
+    PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
+fi
+if [ -z "$PYTHON" ]; then
+    echo "ERROR: no python found"
+    exit 1
+fi
 SRC_BASE="/scratch/eartigau/spirou_tempo"
 SRC_CALIB="$SRC_BASE/calib"
 SRC_OBJECTS="$SRC_BASE/objects"
@@ -8,14 +17,14 @@ SRC_TEMPLATES="$SRC_BASE/red/other"
 # Resolve script directory (works regardless of where the script is invoked from)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine project_path from telluric_config.yaml by checking detect_path for each machine
-BATCH_CONFIG="$SCRIPT_DIR/telluric_config.yaml"
+# Determine project_path from telluric_config_spirou.yaml by checking detect_path for each machine
+BATCH_CONFIG="$SCRIPT_DIR/telluric_config_spirou.yaml"
 if [ ! -f "$BATCH_CONFIG" ]; then
-    echo "ERROR: telluric_config.yaml not found at $BATCH_CONFIG"
+    echo "ERROR: telluric_config_spirou.yaml not found at $BATCH_CONFIG"
     exit 1
 fi
 
-PROJECT_PATH=$(python3 -c "
+PROJECT_PATH=$($PYTHON -c "
 import yaml, os, sys
 cfg_path = '$BATCH_CONFIG'
 with open(cfg_path) as f:
@@ -31,7 +40,7 @@ print('ERROR: No matching machine detected. Checked detect_path for:', file=sys.
 for name, mc in machines.items():
     print(f'  {name}: {mc.get(\"detect_path\", \"(none)\")}', file=sys.stderr)
 print(f'None of these paths exist on this machine.', file=sys.stderr)
-print(f'Add or update your machine entry in: $BATCH_CONFIG (telluric_config.yaml)', file=sys.stderr)
+print(f'Add or update your machine entry in: $BATCH_CONFIG (telluric_config_spirou.yaml)', file=sys.stderr)
 sys.exit(1)
 ")
 if [ $? -ne 0 ]; then
@@ -75,10 +84,10 @@ echo "[1/3] Calibrations OK -> $DST_CALIB"
 echo ""
 
 # Sync science objects — only targets listed under science_targets in the YAML
-echo "[2/3] Loading science_targets from telluric_config.yaml..."
-SCIENCE_TARGETS=($(python3 -c "
+echo "[2/3] Loading science_targets from telluric_config_spirou.yaml..."
+SCIENCE_TARGETS=($($PYTHON -c "
 import yaml, os
-cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
+cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config_spirou.yaml')))
 targets = sorted({t for info in cfg.get('data_recipients', {}).values() for t in (info if isinstance(info, list) else info.get('targets', []))})
 print(' '.join(targets))
 "))
@@ -109,10 +118,10 @@ echo "[2/3] Science objects OK"
 echo ""
 
 # Copy hotstars (flattened - no subdirectories)
-echo "[3/3] Loading hot_stars from telluric_config.yaml..."
-HOT_STARS=($(python3 -c "
+echo "[3/3] Loading hot_stars from telluric_config_spirou.yaml..."
+HOT_STARS=($($PYTHON -c "
 import yaml, os
-cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
+cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config_spirou.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
 "))
 

@@ -1,7 +1,7 @@
 
 # Sync calibration and science files for NIRPS
-# Use the python from the venv directly — avoids shell environment issues
-PYTHON="$HOME/Venv/tellu_env/bin/python"
+# Use the interpreter run_pipeline.py is running under if set, else the venv, avoids shell environment issues
+PYTHON="${TELLURIC_PYTHON:-$HOME/Venv/tellu_env/bin/python}"
 if [ ! -f "$PYTHON" ]; then
     PYTHON=$(which python 2>/dev/null || which python3 2>/dev/null)
 fi
@@ -17,10 +17,10 @@ SRC_TEMPLATES="$SRC_BASE/red/other"
 # Resolve script directory (works regardless of where the script is invoked from)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# Determine project_path from telluric_config.yaml by checking detect_path for each machine
-BATCH_CONFIG="$SCRIPT_DIR/telluric_config.yaml"
+# Determine project_path from telluric_config_nirps.yaml by checking detect_path for each machine
+BATCH_CONFIG="$SCRIPT_DIR/telluric_config_nirps.yaml"
 if [ ! -f "$BATCH_CONFIG" ]; then
-    echo "ERROR: telluric_config.yaml not found at $BATCH_CONFIG"
+    echo "ERROR: telluric_config_nirps.yaml not found at $BATCH_CONFIG"
     exit 1
 fi
 
@@ -40,7 +40,7 @@ print('ERROR: No matching machine detected. Checked detect_path for:', file=sys.
 for name, mc in machines.items():
     print(f'  {name}: {mc.get(\"detect_path\", \"(none)\")}', file=sys.stderr)
 print(f'None of these paths exist on this machine.', file=sys.stderr)
-print(f'Add or update your machine entry in: $BATCH_CONFIG (telluric_config.yaml)', file=sys.stderr)
+print(f'Add or update your machine entry in: $BATCH_CONFIG (telluric_config_nirps.yaml)', file=sys.stderr)
 sys.exit(1)
 ")
 if [ $? -ne 0 ]; then
@@ -86,10 +86,10 @@ echo ""
 
 # Sync science objects — only targets listed under science_targets in the YAML
 echo ""
-echo "[2/3] Loading science_targets from telluric_config.yaml..."
+echo "[2/3] Loading science_targets from telluric_config_nirps.yaml..."
 SCIENCE_TARGETS=($($PYTHON -c "
 import yaml, os
-cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
+cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config_nirps.yaml')))
 targets = sorted({t for info in cfg.get('data_recipients', {}).values() for t in (info if isinstance(info, list) else info.get('targets', []))})
 print(' '.join(targets))
 "))
@@ -121,10 +121,10 @@ echo ""
 
 # Copy hotstars (flattened - no subdirectories)
 echo ""
-echo "[3/3] Loading hot_stars from telluric_config.yaml..."
+echo "[3/3] Loading hot_stars from telluric_config_nirps.yaml..."
 HOT_STARS=($($PYTHON -c "
 import yaml, os
-cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config.yaml')))
+cfg = yaml.safe_load(open(os.path.join(os.path.dirname(os.path.abspath('$0')), 'telluric_config_nirps.yaml')))
 print(' '.join(cfg.get('hot_stars', [])))
 "))
 
