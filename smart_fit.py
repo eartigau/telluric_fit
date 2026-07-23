@@ -208,7 +208,7 @@ def process_single_hotstar(file: str, outname: str, waveref: np.ndarray,
             hdr[f'EXPO_{molecule}'] = expo_optimal[i], f'Optimized exponent for {molecule}'
 
         # Load processing parameters from config
-        config = tt.load_telluric_config()
+        config = tt.load_telluric_config(instrument=instrument)
         medfilt_width_kms = config.get('processing', {}).get('hotstar_medfilt_width', 150)
 
         # Per-order noise metrics on the original (pre-normalisation) spectrum
@@ -390,8 +390,8 @@ def _plot_hotstar_diagnostic(wave, sp, trans2, combined_weights, expo_optimal,
     sp_corr_final : np.ndarray
         Corrected spectrum after sky subtraction
     """
-    # Load demo_order from telluric_config.yaml
-    config = tt.load_telluric_config()
+    # Load demo_order from telluric_config_{instrument}.yaml
+    config = tt.load_telluric_config(instrument=instrument)
     demo_order_config = config.get('demo_order', {}).get(instrument, [0, 71])
     
     if isinstance(demo_order_config, (list, tuple)) and len(demo_order_config) == 2:
@@ -533,9 +533,11 @@ def main(instrument: str = 'NIRPS', doplot: bool = None, n_cores: int = None):
     n_cores : int, optional
         Override n_cores from config
     """
+    os.environ['TELLURIC_INSTRUMENT'] = instrument.upper()
+
     # Load machine config
     import yaml
-    config_path = os.path.join(os.path.dirname(__file__), 'telluric_config.yaml')
+    config_path = os.path.join(os.path.dirname(__file__), f'telluric_config_{instrument.lower()}.yaml')
     with open(config_path, 'r') as f:
         batch_config = yaml.safe_load(f)
     

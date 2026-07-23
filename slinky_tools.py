@@ -974,22 +974,28 @@ def padding_wavesol(params, science_files=None):
 # Main entry points
 # ============================================================================
 
-def run_slinky(science_files=None):
+def run_slinky(science_files=None, instrument=None):
     """
     Full slinky pipeline: refine wavelength solutions then patch science files.
 
-    Reads configuration from telluric_config.yaml (resolved relative to this
-    module's location, same as the rest of the pipeline).
+    Reads configuration from telluric_config_{instrument}.yaml (resolved
+    relative to this module's location, same as the rest of the pipeline).
 
     Parameters
     ----------
     science_files : list of str, optional
         Explicit list of science files to patch after refinement.
         If None, auto-discovered from scidata/hotstars directories.
+    instrument : str, optional
+        'NIRPS' or 'SPIROU'. Defaults to the TELLURIC_INSTRUMENT environment
+        variable (set by run_pipeline.py), else 'NIRPS'.
     """
+    instrument = (instrument or os.environ.get('TELLURIC_INSTRUMENT', 'NIRPS')).upper()
+    os.environ['TELLURIC_INSTRUMENT'] = instrument
+
     tprint('[SLINKY] Chargement de tellu_tools...', color='green')
     import tellu_tools as tt
-    config = tt.load_telluric_config()
+    config = tt.load_telluric_config(instrument=instrument)
     params = _get_slinky_params(config)
     tprint(f'[SLINKY] Instrument : {params["instrument"]}', color='green')
     tprint(f'[SLINKY] Calib dir  : {params["calib_dir"]}', color='green')
@@ -1002,4 +1008,6 @@ def run_slinky(science_files=None):
 
 
 if __name__ == '__main__':
-    run_slinky()
+    import sys
+    _instrument = sys.argv[1].upper() if len(sys.argv) > 1 else None
+    run_slinky(instrument=_instrument)

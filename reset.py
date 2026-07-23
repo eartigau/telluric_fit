@@ -27,7 +27,7 @@ Usage
     python reset.py                        # interactive confirmation
     python reset.py --force                # skip confirmation prompt
     python reset.py --dry-run              # list files without deleting
-    python reset.py --instrument SPIROU    # override instrument from config
+    python reset.py --instrument SPIROU    # select telluric_config_spirou.yaml (default: NIRPS)
 """
 
 import argparse
@@ -45,8 +45,8 @@ import yaml
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
-def _load_config():
-    cfg_path = os.path.join(SCRIPT_DIR, 'telluric_config.yaml')
+def _load_config(instrument='NIRPS'):
+    cfg_path = os.path.join(SCRIPT_DIR, f'telluric_config_{instrument.lower()}.yaml')
     with open(cfg_path) as fh:
         return yaml.safe_load(fh)
 
@@ -144,8 +144,8 @@ def main():
                         help='List targets without deleting anything')
     args = parser.parse_args()
 
-    config = _load_config()
-    instrument = (args.instrument or config.get('instrument', 'NIRPS')).upper()
+    instrument = (args.instrument or 'NIRPS').upper()
+    config = _load_config(instrument)
     project_path = _get_project_path(config)
 
     paper_cfg = config.get('paper_figures', {})

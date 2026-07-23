@@ -1,0 +1,198 @@
+# Telluric Correction Parameters Configuration
+# This file defines parameters for telluric absorption correction
+
+# Instrument settings
+instrument: 'SPIROU'             # NIRPS or SPIROU
+template_style: 'smart'          # model, self, or smart (self if template exists, else model)
+
+# Hot stars used for telluric fitting
+# These objects have featureless spectra ideal for measuring atmospheric absorption
+hot_stars:
+  - 15PEG
+  - 17PEG
+  - 23LMI
+  - 24LYN
+  - 31CAS
+  - 33LYN
+  - 51DRA
+  - 59PEG
+  - 74PSCB
+  - 82UMA
+  - BETSER
+  - CHICAP
+  - ETAPYX
+  - GAMSCT
+  - GAMTRI
+  - HD130917
+  - HD159170
+  - HD195094
+  - HR1314
+  - HR1832
+  - HR1903
+  - HR2180
+  - HR2209
+  - HR3117
+  - HR3131
+  - HR3314
+  - HR4023
+  - HR4467
+  - HR4468
+  - HR4687
+  - HR4722
+  - HR4889
+  - HR5107
+  - HR5671
+  - HR6025
+  - HR6743
+  - HR7590
+  - HR7830
+  - HR806
+  - HR8489
+  - HR8709
+  - HR9098
+  - IOTCYG
+  - LLEO
+  - OMICAPA
+  - PHILEO
+  - PI02ORI
+  - ZETLEP
+  - ZETVIR
+
+# Science targets to process through the full pipeline.
+# Derived automatically from the union of all targets in data_recipients below.
+# (no need to maintain this list separately)
+
+
+# Data sharing: maps each recipient username to their name, email and targets.
+# A target not listed here won't be shared with anyone.
+# A target can appear under multiple recipients.
+data_recipients:
+  eartigau:
+    name: Étienne Artigau
+    email: etienne.artigau@umontreal.ca
+    targets:
+      - GL699
+  lheureux:
+    name: Alexandrine L'Heureux
+    email: alexandrine.lheureux@umontreal.ca
+    targets:
+      - TOI2120
+
+
+
+#acarmona, adb, alvaro, alexsm, allart, arocho11, atriaud, avidaan, bcanto78, cadieux, carteret, charlaf, dasaev, dlafre, eartigau, enola, fbaron, fbel, fgenest, gmraz, jblipper, jglover, joost, larnold, ldang05, leslie05, lheureux, lmalo, mathisb, neilcook, opereira, osouley, rdoyon, roseane, rrosener, ssalhi, sylviefl, vandalt, ymessias
+
+
+# Demo order for diagnostic plots (shown with plt.show() if doplot=True)
+demo_order:
+  NIRPS: 
+    - 0
+    - 71
+  SPIROU: 
+    - 35
+    - 38
+
+# Processing parameters
+processing:
+  randomize_files: true           # Shuffle file order for parallel script execution
+  lowpass_filter_size: 101
+  hotstar_medfilt_width: 150      # Running median filter width for hot stars (km/s)
+  template_ratio_threshold_high: 3.0
+  template_ratio_threshold_low: 0.3
+  template_smooth_window: 501
+  min_valid_ratio: 0.1
+  low_flux_threshold: 0.2
+  sky_rejection_threshold: 1.0
+  dv_amp: 200  # km/s, velocity search range
+
+# Weight transition parameters
+# Controls the sigmoid transition for smooth weighting during optimization
+weighting:
+  # Sigma for sigmoid transition (smaller = sharper transition)
+  # During optimization, weights vary smoothly to avoid convergence issues
+  # In final spectrum, pixels with weight < 0.5 are set to NaN
+  transition_sigma: 0.02
+
+# Per-molecule parameters
+# Each molecule has:
+#   - depth_max: maximum absorption depth threshold
+#   - depth_saturated: depth at which absorption is considered saturated
+#   - reject_saturated: rejection threshold for saturated lines
+molecules:
+  H2O:
+    depth_max: 0.6
+    depth_saturated: 0.5
+    reject_saturated: 0.8
+  CH4:
+    depth_max: 0.5
+    depth_saturated: 0.2
+    reject_saturated: 0.8
+  CO2:
+    depth_max: 0.5
+    depth_saturated: 0.2
+    reject_saturated: 0.8
+  O2:
+    depth_max: 0.8
+    depth_saturated: 0.2
+    reject_saturated: 0.9
+
+# Quality control thresholds for compil_stats
+quality_control:
+  # O2_AIRM validity range - spectra outside this range are excluded from fitting
+  # Low values indicate fluorescence contamination (twilight O2 Meinel bands)
+  o2_airm_min: 0.92
+  o2_airm_max: 1.08
+  # RMS excess factor for residual correction - pixels with RMS > factor * smoothed_envelope
+  # are masked in predict_abso.py (unreliable correction, set to NaN)
+  # The envelope is computed per-order using medfilt + savgol smoothing
+  # Minimum allowed value is 1.5 (will raise error if set lower)
+  rms_excess_factor: 2.0
+
+# =============================================================================
+# Slinky wavelength solution refinement
+# Corrects the cavity (slinky) effect in FP-based wavelength solutions.
+# Requires FP and HC line-list FITS files in calib_INSTRUMENT/ (see sync scripts).
+# =============================================================================
+slinky:
+  doplot: false                    # Show interactive diagnostic plots
+  wave_leverage: 1600              # Leverage point [nm] for linear fit
+  wslinky: 0.1                     # Autocorrelation length of GP kernel [nm]
+
+# Paper figures output folder
+# Set paper_figures: true to generate one representative figure per processing step
+paper_figures:
+  enabled: true                   # Set to true to generate paper figures
+  output_dir: 'paper_figures'      # Folder for paper-quality figures (relative to project_path)
+
+# =============================================================================
+# Machine-specific configuration
+# The code checks each machine's 'detect_path' to determine which machine
+# is being used. The first matching machine configuration will be applied.
+# =============================================================================
+machines:
+  FIR:
+    detect_path: '/home/eartigau/.fir_token'
+    project_path: '/home/eartigau/projects/rrg-rdoyon/eartigau/tapas/test_fit'
+    hostname: 'fir.computecanada.ca'
+    doplot: false                # Don't show interactive plots on FIR
+    n_cores: 8                   # Number of cores for parallel processing
+    # Shared data root: each recipient gets a subdirectory {datashare_dir}/{username}/
+    # This path must be reachable via SSH/rsync by the recipients.
+    datashare_dir: '/scratch/eartigau/datashare'
+    # Environment setup for Compute Canada clusters
+    library_path: '/cvmfs/soft.computecanada.ca/gentoo/2023/x86-64-v3/usr/lib64'
+    conda_env: 'tellu_env'
+
+  MacBook-eartigau:
+    detect_path: '/Users/eartigau/telluric_fit'
+    project_path: '/Users/eartigau/telluric_fit'
+    doplot: true                 # Show interactive plots on MacBook
+    n_cores: auto                # Use all available cores (auto = os.cpu_count())
+
+# =============================================================================
+# Batch settings
+# =============================================================================
+batch:
+  name: 'v23juil2026'          # Batch identifier
+  generate_plots: true           # Generate diagnostic PDF plots
+  plot_orders: [30, 60]          # Order range for plots [min, max], null for all

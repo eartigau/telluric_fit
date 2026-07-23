@@ -124,10 +124,13 @@ def get_project_path() -> str:
     if _cached_project_path is not None:
         return _cached_project_path
     
-    # Load machine configurations from telluric_config.yaml
+    # Load machine configurations from telluric_config_{instrument}.yaml
+    # (machines/project_path are duplicated identically across instruments,
+    # so any instrument's file works here; pick via TELLURIC_INSTRUMENT, default NIRPS)
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'telluric_config.yaml')
-    
+    instrument = os.environ.get('TELLURIC_INSTRUMENT', 'NIRPS').lower()
+    config_path = os.path.join(script_dir, f'telluric_config_{instrument}.yaml')
+
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)

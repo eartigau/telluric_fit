@@ -107,13 +107,13 @@ def get_paper_figures_config(instrument: str = 'NIRPS'):
     tuple : (enabled: bool, output_dir: str or None)
         Whether paper figures are enabled and path to output directory
     """
-    config = load_telluric_config()
+    config = load_telluric_config(instrument=instrument)
     paper_config = config.get('paper_figures', {})
     enabled = paper_config.get('enabled', False)
-    
+
     if not enabled:
         return False, None
-    
+
     params = get_user_params(instrument)
     project_path = params['project_path']
     output_dir = os.path.join(project_path, paper_config.get('output_dir', 'paper_figures'))
@@ -249,12 +249,12 @@ def accurate_airmass(z):
 # Dictionary to accumulate all fitted parameters for output
 tbl_params_fit = dict()
 
-# Instrument selection: read from command-line arg, else from telluric_config.yaml
+# Instrument selection: read from command-line arg, else TELLURIC_INSTRUMENT, else NIRPS
 if len(sys.argv) > 1:
     instrument = sys.argv[1].upper()
 else:
-    _cfg = load_telluric_config()
-    instrument = _cfg.get('instrument', 'NIRPS').upper()
+    instrument = os.environ.get('TELLURIC_INSTRUMENT', 'NIRPS').upper()
+os.environ['TELLURIC_INSTRUMENT'] = instrument
 
 # Sigma-clipping threshold for outlier rejection in iterative fits
 # Points deviating more than sigma_cut × robust_std are removed

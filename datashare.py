@@ -42,9 +42,12 @@ from tqdm import tqdm
 from astropy.io import fits
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CFG_PATH = os.path.join(SCRIPT_DIR, 'telluric_config.yaml')
 
 SENDER_EMAIL = 'etienne.artigau@gmail.com'
+
+
+def _cfg_path(instrument='NIRPS'):
+    return os.path.join(SCRIPT_DIR, f'telluric_config_{instrument.lower()}.yaml')
 
 
 # ---------------------------------------------------------------------------
@@ -66,14 +69,14 @@ def get_science_targets(config):
     return sorted(targets)
 
 
-def load_config():
-    with open(CFG_PATH) as fh:
+def load_config(instrument='NIRPS'):
+    with open(_cfg_path(instrument)) as fh:
         return yaml.safe_load(fh)
 
 
-def save_config(config):
-    """Write the config back to telluric_config.yaml (comments are not preserved)."""
-    with open(CFG_PATH, 'w') as fh:
+def save_config(config, instrument='NIRPS'):
+    """Write the config back to telluric_config_{instrument}.yaml (comments are not preserved)."""
+    with open(_cfg_path(instrument), 'w') as fh:
         yaml.dump(config, fh, default_flow_style=False, allow_unicode=True, sort_keys=False)
 
 
@@ -95,7 +98,7 @@ def parse_recipients(raw_recipients):
     return result
 
 
-def prompt_missing_info(parsed, config, no_prompt=False):
+def prompt_missing_info(parsed, config, no_prompt=False, instrument='NIRPS'):
     """Interactively ask for missing name/email and persist to the yaml."""
     cfg_recipients = config.setdefault('data_recipients', {})
     changed = False
@@ -126,8 +129,8 @@ def prompt_missing_info(parsed, config, no_prompt=False):
                     changed = True
 
     if changed:
-        save_config(config)
-        print('  [INFO] Contact info saved to telluric_config.yaml')
+        save_config(config, instrument=instrument)
+        print(f'  [INFO] Contact info saved to telluric_config_{instrument.lower()}.yaml')
 
 
 def get_gmail_app_password():
@@ -562,7 +565,8 @@ def main():
                         help='List all recipients with name, email and targets, then exit')
     args = parser.parse_args()
 
-    config = load_config()
+    instrument = (args.instrument or 'NIRPS').upper()
+    config = load_config(instrument)
 
     if args.list_recipients:
         raw = config.get('data_recipients', {})
@@ -576,14 +580,13 @@ def main():
             print('{:<12}  {:<25}  {:<40}  {}'.format(user, name, email, targets))
         sys.exit(0)
 
-    instrument = (args.instrument or config.get('instrument', 'NIRPS')).upper()
     project_path = get_project_path(config)
     hostname = get_hostname(config)
     batch_name = config.get('batch', {}).get('name', 'unknown')
 
     raw_recipients = config.get('data_recipients', {})
     if not raw_recipients:
-        print('No data_recipients defined in telluric_config.yaml. Nothing to do.')
+        print(f'No data_recipients defined in telluric_config_{instrument.lower()}.yaml. Nothing to do.')
         sys.exit(0)
 
     if args.user:
@@ -593,7 +596,7 @@ def main():
         raw_recipients = {args.user: raw_recipients[args.user]}
 
     recipients = parse_recipients(raw_recipients)
-    prompt_missing_info(recipients, config, no_prompt=args.no_prompt)
+    prompt_missing_info(recipients, config, no_prompt=args.no_prompt, instrument=instrument)
 
     tellupatched_dir = os.path.join(project_path, f'tellupatched_{instrument}')
     machine_cfg = get_machine_cfg(config)

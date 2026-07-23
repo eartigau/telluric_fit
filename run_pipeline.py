@@ -11,7 +11,7 @@ Runs the following steps in sequence for NIRPS or SPIROU:
 
 Usage
 -----
-    python run_pipeline.py                      # all steps; instrument read from telluric_config.yaml
+    python run_pipeline.py                      # all steps; instrument defaults to NIRPS
     python run_pipeline.py --skip-sync          # skip rsync
     python run_pipeline.py --skip-slinky        # skip slinky
     python run_pipeline.py --skip-hotstar       # skip hot-star fit
@@ -43,8 +43,8 @@ def _tprint(msg, color=None):
     print(f'[{ts}] {msg}', flush=True)
 
 
-def _load_telluric_config():
-    cfg_path = os.path.join(SCRIPT_DIR, 'telluric_config.yaml')
+def _load_telluric_config(instrument):
+    cfg_path = os.path.join(SCRIPT_DIR, f'telluric_config_{instrument.lower()}.yaml')
     with open(cfg_path, 'r') as fh:
         return yaml.safe_load(fh)
 
@@ -80,10 +80,10 @@ def run_sync(instrument):
 # Step 2 — slinky
 # ---------------------------------------------------------------------------
 
-def run_slinky():
-    _step_header('STEP 2/6 — SLINKY (wavelength solution refinement)')
+def run_slinky(instrument):
+    _step_header(f'STEP 2/6 — SLINKY (wavelength solution refinement) ({instrument})')
     import slinky_tools
-    slinky_tools.run_slinky()
+    slinky_tools.run_slinky(instrument=instrument)
     _tprint('Slinky done.')
 
 
@@ -116,10 +116,10 @@ def run_compilstats(instrument):
 # Step 5 — residuals
 # ---------------------------------------------------------------------------
 
-def run_residuals():
-    _step_header('STEP 5/6 — RESIDUALS (empirical per-pixel correction maps)')
+def run_residuals(instrument):
+    _step_header(f'STEP 5/6 — RESIDUALS ({instrument})')
     residuals_script = os.path.join(SCRIPT_DIR, 'residuals.py')
-    ret = subprocess.call([sys.executable, residuals_script], cwd=SCRIPT_DIR)
+    ret = subprocess.call([sys.executable, residuals_script, instrument], cwd=SCRIPT_DIR)
     if ret != 0:
         _tprint(f'WARNING: residuals.py returned exit code {ret}.')
     else:
@@ -157,34 +157,20 @@ def run_telluric(objects, instrument, batch_name, template_style, force_recomput
 # ---------------------------------------------------------------------------
 
 def main():
-    cfg = _load_telluric_config()
-    default_instrument = cfg.get('instrument', 'NIRPS').upper()
-    default_targets = sorted({
-        t
-        for info in cfg.get('data_recipients', {}).values()
-        for t in (info if isinstance(info, list) else info.get('targets', []))
-    })
-    default_template = cfg.get('template_style', 'model')
-
-    # Read batch name from telluric_config.yaml
-    batch_section = cfg.get('batch', {})
-    default_batch = (batch_section.get('name') if isinstance(batch_section, dict)
-                     else cfg.get('batch_name', 'skypca_v5'))
-
     parser = argparse.ArgumentParser(
         description='Full telluric correction pipeline (rsync → slinky → residuals → telluric)',
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument('--instrument', default=default_instrument,
+    parser.add_argument('--instrument', default='NIRPS',
                         choices=['NIRPS', 'SPIROU'],
-                        help='Instrument')
+                        help='Instrument (selects telluric_config_<instrument>.yaml)')
     parser.add_argument('--object', default=None,
-                        help='Process a single object (default: all science_targets from YAML)')
-    parser.add_argument('--batch', default=default_batch,
-                        help='Batch name (output identifier)')
-    parser.add_argument('--template', default=default_template,
+                        help='Process a single object (default: all science_targets from the instrument YAML)')
+    parser.add_argument('--batch', default=None,
+                        help='Batch name (output identifier); default: batch.name from the instrument YAML')
+    parser.add_argument('--template', default=None,
                         choices=['model', 'self', 'smart'],
-                        help='Stellar template style')
+                        help='Stellar template style; default: template_style from the instrument YAML')
 
     # Step control
     step_group = parser.add_argument_group('Step control')
@@ -219,14 +205,29 @@ def main():
         args.skip_residuals = True
 
     instrument = args.instrument.upper()
+    os.environ['TELLURIC_INSTRUMENT'] = instrument
+
+    cfg = _load_telluric_config(instrument)
+    default_targets = sorted({
+        t
+        for info in cfg.get('data_recipients', {}).values()
+        for t in (info if isinstance(info, list) else info.get('targets', []))
+    })
+    default_template = cfg.get('template_style', 'model')
+    batch_section = cfg.get('batch', {})
+    default_batch = (batch_section.get('name') if isinstance(batch_section, dict)
+                     else cfg.get('batch_name', 'skypca_v5'))
+
     objects = [args.object] if args.object else default_targets
+    batch = args.batch if args.batch is not None else default_batch
+    template = args.template if args.template is not None else default_template
 
     if not objects:
-        print('ERROR: no object specified and data_recipients is empty in telluric_config.yaml.')
+        print(f'ERROR: no object specified and data_recipients is empty in telluric_config_{instrument.lower()}.yaml.')
         sys.exit(1)
 
     t0 = time.time()
-    _tprint(f'Pipeline started | instrument={instrument} | objects={objects} | batch={args.batch}')
+    _tprint(f'Pipeline started | instrument={instrument} | objects={objects} | batch={batch}')
 
     # ---- Step 1 ----
     if not args.skip_sync:
@@ -234,7 +235,7 @@ def main():
 
     # ---- Step 2 ----
     if not args.skip_slinky:
-        run_slinky()
+        run_slinky(instrument)
 
     # ---- Step 3 ----
     if not args.skip_hotstar:
@@ -246,15 +247,15 @@ def main():
 
     # ---- Step 5 ----
     if not args.skip_residuals:
-        run_residuals()
+        run_residuals(instrument)
 
     # ---- Step 6 ----
     if not args.skip_telluric:
         run_telluric(
             objects=objects,
             instrument=instrument,
-            batch_name=args.batch,
-            template_style=args.template,
+            batch_name=batch,
+            template_style=template,
             force_recompute=args.recompute,
         )
 

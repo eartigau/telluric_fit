@@ -24,33 +24,36 @@ DEFAULT_PARAMS = {
 }
 
 
-def _load_machine_config() -> Dict[str, Any]:
-    """Load machine-specific config from telluric_config.yaml."""
+def _config_path(instrument: str) -> str:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'telluric_config.yaml')
-    
+    return os.path.join(script_dir, f'telluric_config_{instrument.lower()}.yaml')
+
+
+def _load_machine_config(instrument: str) -> Dict[str, Any]:
+    """Load machine-specific config from telluric_config_{instrument}.yaml."""
+    config_path = _config_path(instrument)
+
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        
+
         machines = config.get('machines', {})
         for machine_name, machine_config in machines.items():
             detect_path = machine_config.get('detect_path', '')
             if detect_path and os.path.exists(detect_path):
                 return machine_config
-    
+
     return {}
 
 
-def _load_telluric_config() -> Dict[str, Any]:
-    """Load telluric config from telluric_config.yaml."""
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(script_dir, 'telluric_config.yaml')
-    
+def _load_telluric_config(instrument: str) -> Dict[str, Any]:
+    """Load telluric config from telluric_config_{instrument}.yaml."""
+    config_path = _config_path(instrument)
+
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             return yaml.safe_load(f)
-    
+
     return {}
 
 
@@ -84,12 +87,12 @@ def get_batch_config(batch_name: str, instrument: str, obj: str,
         raise ValueError(f"Unknown template_style: {template_style}. Must be 'model', 'self', or 'smart'")
 
     # Load machine-specific settings (doplot, n_cores)
-    machine_config = _load_machine_config()
+    machine_config = _load_machine_config(instrument)
     doplot = machine_config.get('doplot', False)
     n_cores = machine_config.get('n_cores', 1)
 
     # Load telluric config for demo_order and processing options
-    telluric_config = _load_telluric_config()
+    telluric_config = _load_telluric_config(instrument)
     demo_orders = telluric_config.get('demo_order', {'NIRPS': 55, 'SPIROU': 35})
     demo_order = demo_orders.get(instrument, 55)
     

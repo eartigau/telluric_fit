@@ -86,7 +86,7 @@ def format_eta(seconds: float) -> str:
 
 def get_paper_figures_config(instrument: str = 'NIRPS'):
     """Get paper figures configuration from yaml."""
-    config = tt.load_telluric_config()
+    config = tt.load_telluric_config(instrument=instrument)
     paper_config = config.get('paper_figures', {})
     enabled = paper_config.get('enabled', False)
     
@@ -547,7 +547,7 @@ def process_single_file(file: str, config: Dict, spl, spl_dv,
     molecules = config['molecules']
     
     # Load telluric config for quality control thresholds
-    telluric_config = tt.load_telluric_config()
+    telluric_config = tt.load_telluric_config(instrument=instrument)
     rms_excess_factor = telluric_config.get('quality_control', {}).get('rms_excess_factor', 2.0)
     
     # Validate the excess factor
@@ -1373,20 +1373,26 @@ def main(batch_name: Optional[str] = None, instrument: Optional[str] = None,
 
 
 
-def load_batch_config_yaml(config_path: str = 'telluric_config.yaml') -> dict:
+def load_batch_config_yaml(config_path: Optional[str] = None) -> dict:
     """
     Load batch configuration from YAML file.
-    
+
     Parameters
     ----------
-    config_path : str
-        Path to the config YAML file (defaults to telluric_config.yaml)
-    
+    config_path : str, optional
+        Path to the config YAML file. Defaults to
+        telluric_config_{instrument}.yaml, where instrument comes from the
+        TELLURIC_INSTRUMENT environment variable (NIRPS if unset).
+
     Returns
     -------
     config : dict
         Configuration dictionary with batch settings
     """
+    if config_path is None:
+        instrument = os.environ.get('TELLURIC_INSTRUMENT', 'NIRPS')
+        config_path = f'telluric_config_{instrument.lower()}.yaml'
+
     # Try relative to script directory first
     script_dir = os.path.dirname(os.path.abspath(__file__))
     full_path = os.path.join(script_dir, config_path)
@@ -1436,6 +1442,8 @@ if __name__ == '__main__':
                        help='Force recomputation of precomputed absorption grid')
 
     args = parser.parse_args()
+    args.instrument = args.instrument.upper()
+    os.environ['TELLURIC_INSTRUMENT'] = args.instrument
 
     # List objects if requested
     if args.list_objects:
@@ -1490,18 +1498,18 @@ if __name__ == '__main__':
             # Explicit single-object run
             objects_to_run = [args.object]
         else:
-            # No --object given: derive targets from data_recipients in telluric_config.yaml
-            telluric_cfg = tt.load_telluric_config()
+            # No --object given: derive targets from data_recipients in telluric_config_{instrument}.yaml
+            telluric_cfg = tt.load_telluric_config(instrument=args.instrument)
             objects_to_run = sorted({
                 t
                 for info in telluric_cfg.get('data_recipients', {}).values()
                 for t in (info if isinstance(info, list) else info.get('targets', []))
             })
             if not objects_to_run:
-                tprint("ERROR: No --object given and no targets in data_recipients in telluric_config.yaml",
+                tprint(f"ERROR: No --object given and no targets in data_recipients in telluric_config_{args.instrument.lower()}.yaml",
                        color='red')
                 sys.exit(1)
-            tprint(f"Using targets from data_recipients in telluric_config.yaml: {objects_to_run}",
+            tprint(f"Using targets from data_recipients in telluric_config_{args.instrument.lower()}.yaml: {objects_to_run}",
                    color='cyan')
 
         for obj_name in objects_to_run:

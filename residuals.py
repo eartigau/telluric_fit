@@ -1,5 +1,6 @@
 import glob
 import os
+import sys
 import warnings
 from astropy.io import fits
 import numpy as np
@@ -403,7 +404,11 @@ if __name__ == '__main__':
     # Load inputs and prepare global/static products
     # -------------------------------------------------------------------------
 
-    instrument = 'NIRPS'
+    if len(sys.argv) > 1:
+        instrument = sys.argv[1].upper()
+    else:
+        instrument = os.environ.get('TELLURIC_INSTRUMENT', 'NIRPS').upper()
+    os.environ['TELLURIC_INSTRUMENT'] = instrument
 
     # Get project path for this machine
     params = get_user_params(instrument)

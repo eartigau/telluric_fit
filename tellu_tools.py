@@ -71,7 +71,6 @@ from tellu_tools_config import (
 )
 
 # Default path to telluric config
-TELLURIC_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'telluric_config.yaml')
 
 
 # ============================================================================
@@ -516,15 +515,31 @@ def get_molecule_weights(transmission: np.ndarray,
     )
 
 
-def load_telluric_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+def telluric_config_path(instrument: Optional[str] = None) -> str:
+    """
+    Resolve the path to telluric_config_{instrument}.yaml.
+
+    Instrument is taken from the argument, else the TELLURIC_INSTRUMENT
+    environment variable (set by run_pipeline.py and other entry points
+    once the instrument is known), else DEFAULT_INSTRUMENT.
+    """
+    instrument = (instrument or os.environ.get('TELLURIC_INSTRUMENT') or DEFAULT_INSTRUMENT).upper()
+    return os.path.join(os.path.dirname(__file__), f'telluric_config_{instrument.lower()}.yaml')
+
+
+def load_telluric_config(config_path: Optional[str] = None,
+                          instrument: Optional[str] = None) -> Dict[str, Any]:
     """
     Load telluric configuration from YAML file.
 
     Parameters
     ----------
     config_path : str, optional
-        Path to telluric config YAML. Defaults to telluric_config.yaml
+        Path to telluric config YAML. Defaults to telluric_config_{instrument}.yaml
         in the same directory as this module.
+    instrument : str, optional
+        Instrument name used to pick the config file when config_path is not
+        given. See telluric_config_path().
 
     Returns
     -------
@@ -532,7 +547,7 @@ def load_telluric_config(config_path: Optional[str] = None) -> Dict[str, Any]:
         Configuration dictionary with molecule parameters
     """
     if config_path is None:
-        config_path = TELLURIC_CONFIG_PATH
+        config_path = telluric_config_path(instrument)
 
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
