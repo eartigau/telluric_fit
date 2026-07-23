@@ -73,14 +73,18 @@ echo "[1/3] Calibrations"
 echo "  FROM : $SRC_CALIB"
 echo "  TO   : $DST_CALIB"
 echo "  Patterns : wave_fplines, wave_hclines, wavesol_ref, waveref_hclines, wave_night"
-find "$SRC_CALIB" -maxdepth 2 -type f \( \
+N_CALIB_SRC=$(find "$SRC_CALIB" -maxdepth 2 -type f \( \
   -name '*wave_fplines_AB.fits' -o \
   -name '*wave_hclines_AB.fits' -o \
   -name '*wavesol_ref_AB.fits' -o \
   -name '*waveref_hclines*AB.fits' -o \
   -name '*_e2dsff_AB_wave_night_AB.fits' \
-\) -exec cp -u {} "$DST_CALIB/" \;
-echo "[1/3] Calibrations OK -> $DST_CALIB"
+\) -print -exec cp -u {} "$DST_CALIB/" \; | wc -l | tr -d ' ')
+if [ "$N_CALIB_SRC" -eq 0 ]; then
+    echo "[1/3] WARNING: 0 calibration files matched under $SRC_CALIB — check SRC_CALIB and the naming patterns."
+else
+    echo "[1/3] Calibrations OK -> $DST_CALIB ($N_CALIB_SRC file(s) matched)"
+fi
 echo ""
 
 # Sync science objects — only targets listed under science_targets in the YAML
