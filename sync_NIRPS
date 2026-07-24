@@ -81,10 +81,22 @@ N_CALIB_SRC=$(find "$SRC_CALIB" -maxdepth 2 -type f \( \
   -name '*waveref_hclines*A.fits' -o \
   -name '*_e2dsff_A_wave_night_A.fits' \
 \) -print -exec cp -u {} "$DST_CALIB/" \; | wc -l | tr -d ' ')
+
+# Per-night FP/HC line-position tables live under red/YYYY-MM-DD/, not the flat
+# calib/ dir — copy those in too (flattened into DST_CALIB, same as above).
+SRC_RED="$SRC_BASE/red"
+if [ -d "$SRC_RED" ]; then
+    N_CALIB_RED=$(find "$SRC_RED" -mindepth 2 -maxdepth 2 -type f \( \
+      -name '*fplines_A.fits' -o \
+      -name '*hclines_A.fits' \
+    \) -print -exec cp -u {} "$DST_CALIB/" \; | wc -l | tr -d ' ')
+    N_CALIB_SRC=$((N_CALIB_SRC + N_CALIB_RED))
+fi
+
 if [ "$N_CALIB_SRC" -eq 0 ]; then
-    echo "[1/3] WARNING: 0 calibration files matched under $SRC_CALIB — check SRC_CALIB and the naming patterns."
+    echo "[1/3] WARNING: 0 calibration files matched under $SRC_CALIB or $SRC_RED — check paths and naming patterns."
 else
-    echo "[1/3] Calibrations OK -> $DST_CALIB ($N_CALIB_SRC file(s) matched)"
+    echo "[1/3] Calibrations OK -> $DST_CALIB ($N_CALIB_SRC file(s) matched, including $SRC_RED/*/)"
 fi
 echo ""
 
