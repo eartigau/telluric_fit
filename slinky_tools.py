@@ -355,8 +355,8 @@ def refine_wavesol(params):
     # ------------------------------------------------------------------
     # Find all FP / HC files, match by MJD
     # ------------------------------------------------------------------
-    files_fp, mjds_fp = search_fits_with_mjd(f'{calib_dir}/*wave_fplines_{fiber}.fits')
-    files_hc, mjds_hc = search_fits_with_mjd(f'{calib_dir}/*wave_hclines_{fiber}.fits')
+    files_fp, mjds_fp = search_fits_with_mjd(f'{calib_dir}/*fplines_{fiber}.fits')
+    files_hc, mjds_hc = search_fits_with_mjd(f'{calib_dir}/*hclines_{fiber}.fits')
 
     if len(files_fp) == 0 or len(files_hc) == 0:
         raise FileNotFoundError(

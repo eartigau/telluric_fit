@@ -140,8 +140,8 @@ Slinky-specific parameters are in `telluric_config.yaml` under the `slinky:` sec
 The list of science targets to patch is taken from the **top-level** `science_targets:` key in `telluric_config.yaml` (see [Top-level Keys](#top-level-keys) below). Hot stars are always included automatically regardless of this list. If `science_targets` is empty, all files in `scidata_INSTRUMENT/` are processed.
 
 ### Required Input Files (in `calib_INSTRUMENT/`)
-- `*wave_fplines_{fiber}.fits` — FP line-position tables
-- `*wave_hclines_{fiber}.fits` — HC line-position tables
+- `*fplines_{fiber}.fits` (e.g. `*waveref_fplines_{fiber}.fits`) — FP line-position tables
+- `*hclines_{fiber}.fits` (e.g. `*waveref_hclines_{fiber}.fits`) — HC line-position tables
 - `*_wavesol_ref_{fiber}.fits` — Reference wavelength solution
 - `*waveref_hclines*{fiber}.fits` — HC reference line list
 
